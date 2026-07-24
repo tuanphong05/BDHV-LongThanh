@@ -412,7 +412,7 @@ async function loadCatalog(){
   state.categories = [...new Set(res.items.map(i=>i.category).filter(Boolean))];
 
   els.memberSelect.innerHTML = '<option value="">— Chọn tên của anh/chị —</option>' +
-    state.members.map((m, idx)=>`<option value="${escapeHtml(m.name)}">${idx+1}/${escapeHtml(m.name)}</option>`).join('');
+    state.members.map((m, idx)=>`<option value="${escapeHtml(m.name)}">${idx+1}. ${escapeHtml(m.name)}</option>`).join('');
 
   renderTabs();
   els.catalogCard.style.display = 'block';
