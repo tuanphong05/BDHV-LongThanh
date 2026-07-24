@@ -404,6 +404,25 @@ function escapeHtml(s){
 }
 function cssSafe(s){ return String(s).replace(/[^a-zA-Z0-9]/g,'_'); }
 
+// Chia nhân viên thành nhóm theo số thứ tự (đúng thứ tự cột trong sheet "Tổng hợp").
+// Đổi các mốc "from/to" bên dưới nếu danh sách nhân viên trong sheet thay đổi sau này.
+const MEMBER_GROUPS = [
+  { label: 'ATCO',  from: 1,  to: 15 },
+  { label: 'ATSEP', from: 16, to: 40 },
+  { label: 'SIG',   from: 41, to: 42 },
+];
+
+function renderMemberOptions(){
+  return MEMBER_GROUPS.map(g=>{
+    const opts = state.members
+      .map((m, i)=>({ m: m, num: i+1 }))
+      .filter(({num})=> num >= g.from && num <= g.to)
+      .map(({m, num})=>`<option value="${escapeHtml(m.name)}">${num}. ${escapeHtml(m.name)}</option>`)
+      .join('');
+    return opts ? `<optgroup label="${escapeHtml(g.label)}">${opts}</optgroup>` : '';
+  }).join('');
+}
+
 async function loadCatalog(){
   const res = await apiGet({ action:'catalog' });
   if (!res.ok){ alert('Lỗi tải danh mục: ' + res.error); return; }
@@ -411,8 +430,7 @@ async function loadCatalog(){
   state.items = res.items;
   state.categories = [...new Set(res.items.map(i=>i.category).filter(Boolean))];
 
-  els.memberSelect.innerHTML = '<option value="">— Chọn tên của anh/chị —</option>' +
-    state.members.map((m, idx)=>`<option value="${escapeHtml(m.name)}">${idx+1}. ${escapeHtml(m.name)}</option>`).join('');
+  els.memberSelect.innerHTML = '<option value="">— Chọn tên của anh/chị —</option>' + renderMemberOptions();
 
   renderTabs();
   els.catalogCard.style.display = 'block';
