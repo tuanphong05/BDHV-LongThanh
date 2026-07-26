@@ -73,8 +73,9 @@ function readStructure_(sheet) {
   }
 
   // 3) Tìm hàng tiêu đề bảng hàng hoá: có cả "STT", "Tên hàng hoá", "Đơn giá"
+  //    Cột "Hình ảnh" là tuỳ chọn — có thì đọc, không có vẫn chạy bình thường.
   let itemHeaderRow = -1;
-  let colSTT = -1, colName = -1, colUnit = -1, colPrice = -1;
+  let colSTT = -1, colName = -1, colUnit = -1, colPrice = -1, colImage = -1;
   for (let r = nameRow; r < numRows; r++) {
     let hasStt = false, hasName = false, hasPrice = false;
     for (let c = 0; c < numCols; c++) {
@@ -83,6 +84,7 @@ function readStructure_(sheet) {
       if (val === 'Tên hàng hoá' || val === 'Tên hàng hóa') { hasName = true; colName = c; }
       if (val === 'Đơn vị tính') colUnit = c;
       if (val === 'Đơn giá') { hasPrice = true; colPrice = c; }
+      if (val === 'Hình ảnh' || val === 'Link ảnh' || val === 'URL ảnh') colImage = c;
     }
     if (hasStt && hasName && hasPrice) { itemHeaderRow = r; break; }
   }
@@ -106,6 +108,7 @@ function readStructure_(sheet) {
       name: nameVal,
       unit: colUnit >= 0 ? String(data[r][colUnit]).trim() : '',
       price: Number(data[r][colPrice]) || 0,
+      image: colImage >= 0 ? String(data[r][colImage]).trim() : '',
       category: currentCategory
     });
   }
@@ -124,7 +127,7 @@ function doGet(e) {
     if (action === 'catalog') {
       const members = struct.members.map(function (m) { return { name: m.name, budget: m.budget }; });
       const items = struct.items.map(function (it) {
-        return { stt: it.stt, name: it.name, unit: it.unit, price: it.price, category: it.category };
+        return { stt: it.stt, name: it.name, unit: it.unit, price: it.price, image: it.image, category: it.category };
       });
       return jsonOut_({ ok: true, members: members, items: items });
     }

@@ -158,7 +158,7 @@
 
   .item-row{
     display:grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: 44px 1fr auto auto;
     align-items:center;
     gap:10px 16px;
     padding:12px 10px;
@@ -178,6 +178,13 @@
     font-size:10.5px; font-weight:700; letter-spacing:.02em; color:#fff;
     background:var(--blue); padding:2px 7px; border-radius:999px;
   }
+  .item-thumb{
+    width:44px; height:44px; border-radius:8px; flex:none;
+    background:var(--bg); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden; color:var(--ink-soft);
+  }
+  .item-thumb img{width:100%; height:100%; object-fit:contain;}
   .item-name{font-size:14.5px; font-weight:500;}
   .item-meta{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
   .item-price{font-size:13.5px; color:var(--ink-soft); text-align:right; min-width:92px;}
@@ -257,7 +264,18 @@
   .scroll-top-btn:active{transform:translateY(0) scale(.95);}
 
   @media (max-width:520px){
-    .item-row{grid-template-columns: 1fr; row-gap:8px;}
+    .item-row{
+      grid-template-columns: 44px 1fr;
+      grid-template-areas:
+        "thumb name"
+        "thumb price"
+        "thumb stepper";
+      row-gap:6px;
+    }
+    .item-thumb{grid-area:thumb;}
+    .item-row > div:nth-child(2){grid-area:name;}
+    .item-row > div:nth-child(3){grid-area:price;}
+    .item-row > .stepper{grid-area:stepper;}
     .item-price, .item-subtotal{text-align:left;}
     .action-bar{flex-direction:column; align-items:stretch;}
     .summary-row{grid-template-columns: 1fr 34px 92px 24px;}
@@ -378,6 +396,9 @@ const els = {
 };
 
 function vnd(n){ return Math.round(n).toLocaleString('vi-VN') + ' ₫'; }
+
+// Icon hộp hàng đơn giản, dùng khi mặt hàng chưa có ảnh hoặc ảnh không tải được
+const THUMB_PLACEHOLDER = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
 
 async function apiGet(params){
   const url = APPS_SCRIPT_URL + '?' + new URLSearchParams(params).toString();
@@ -502,6 +523,7 @@ function renderList(){
     const row = document.createElement('div');
     row.className = 'item-row' + (qty>0 ? ' selected' : '');
     row.innerHTML = `
+      <div class="item-thumb">${it.image ? `<img src="${escapeHtml(it.image)}" alt="" loading="lazy">` : THUMB_PLACEHOLDER}</div>
       <div>
         <div class="item-name">${escapeHtml(it.name)}${qty>0 ? '<span class="selected-badge">✓ Đã chọn</span>' : ''}</div>
         <div class="item-meta">${escapeHtml(it.unit || '')}${it.category ? ' · '+escapeHtml(it.category) : ''}</div>
@@ -516,6 +538,8 @@ function renderList(){
         <button type="button" aria-label="Tăng">+</button>
       </div>
     `;
+    const thumbImg = row.querySelector('.item-thumb img');
+    if (thumbImg) thumbImg.onerror = function(){ row.querySelector('.item-thumb').innerHTML = THUMB_PLACEHOLDER; };
     const [minusBtn, plusBtn] = row.querySelectorAll('.stepper button');
     const input = row.querySelector('.stepper input');
     const subEl = row.querySelector('.item-subtotal');
