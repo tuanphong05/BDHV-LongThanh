@@ -201,10 +201,15 @@
   .s-price, .s-qty, .s-subtotal{text-align:right; font-family:'IBM Plex Mono',monospace;}
   .s-subtotal{color:var(--blue); font-weight:600;}
   .s-remove{
-    background:none; border:none; color:var(--ink-soft); font-size:17px;
-    cursor:pointer; line-height:1; padding:3px 6px; border-radius:6px; justify-self:end;
+    width:26px; height:26px;
+    display:flex; align-items:center; justify-content:center;
+    background:#FBEAE6; border:1px solid #EFC2B4; color:#B3432B;
+    font-size:15px; font-weight:700; line-height:1;
+    cursor:pointer; border-radius:999px; justify-self:end;
+    transition:background .15s ease, transform .1s ease, box-shadow .15s ease;
   }
-  .s-remove:hover{background:var(--bg); color:#B3432B;}
+  .s-remove:hover{background:#F5CFC2; box-shadow:0 2px 6px rgba(179,67,43,.25);}
+  .s-remove:active{transform:scale(.92);}
 
   .action-bar{
     position:fixed; left:0; right:0; bottom:0;
@@ -414,7 +419,7 @@ function renderSummary(){
       <div class="s-price">${vnd(item.price)}</div>
       <div class="s-qty">× ${qty}</div>
       <div class="s-subtotal">${vnd(item.price*qty)}</div>
-      <button type="button" class="s-remove" data-name="${escapeHtml(item.name)}" aria-label="Bỏ chọn ${escapeHtml(item.name)}">×</button>
+      <button type="button" class="s-remove" data-name="${escapeHtml(item.name)}" aria-label="Bỏ chọn ${escapeHtml(item.name)}" title="Bỏ chọn mặt hàng này">×</button>
     </div>
   `).join('');
 
