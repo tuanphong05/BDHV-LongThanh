@@ -182,6 +182,30 @@
 
   .empty-note{color:var(--ink-soft); font-size:13.5px; padding:14px 0;}
 
+  .summary-table{border:1px solid var(--line); border-radius:8px; overflow:hidden;}
+  .summary-row{
+    display:grid;
+    grid-template-columns: 1fr 96px 42px 100px 28px;
+    align-items:center;
+    gap:6px 12px;
+    padding:10px 12px;
+    border-bottom:1px solid var(--line);
+    font-size:13.5px;
+  }
+  #summaryList .summary-row:last-child{border-bottom:none;}
+  .summary-head{
+    background:var(--bg);
+    font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--ink-soft); font-weight:600;
+  }
+  .s-price, .s-qty, .s-subtotal{text-align:right; font-family:'IBM Plex Mono',monospace;}
+  .s-subtotal{color:var(--blue); font-weight:600;}
+  .s-remove{
+    background:none; border:none; color:var(--ink-soft); font-size:17px;
+    cursor:pointer; line-height:1; padding:3px 6px; border-radius:6px; justify-self:end;
+  }
+  .s-remove:hover{background:var(--bg); color:#B3432B;}
+
   .action-bar{
     position:fixed; left:0; right:0; bottom:0;
     background:var(--surface); border-top:1px solid var(--line);
@@ -205,6 +229,8 @@
     .item-row{grid-template-columns: 1fr; row-gap:8px;}
     .item-price, .item-subtotal{text-align:left;}
     .action-bar{flex-direction:column; align-items:stretch;}
+    .summary-row{grid-template-columns: 1fr 34px 92px 24px;}
+    .summary-row > *:nth-child(2){display:none;}
   }
   @media (prefers-reduced-motion: reduce){
     .gauge-fill{transition:none;}
@@ -244,6 +270,21 @@
       <div class="gauge-threshold" id="gaugeThreshold"></div>
     </div>
     <div class="gauge-status" id="gaugeStatus"></div>
+  </div>
+
+  <div class="card" id="summaryCard" style="display:none">
+    <h2>Mặt hàng đã chọn</h2>
+    <div class="summary-table" id="summaryTable">
+      <div class="summary-row summary-head">
+        <div>Tên hàng hoá</div>
+        <div>Đơn giá</div>
+        <div>SL</div>
+        <div>Thành tiền</div>
+        <div></div>
+      </div>
+      <div id="summaryList"></div>
+    </div>
+    <div class="empty-note" id="summaryEmpty">Chưa chọn mặt hàng nào — chọn hàng ở danh mục bên dưới.</div>
   </div>
 
   <div class="card" id="catalogCard" style="display:none">
@@ -286,6 +327,9 @@ const els = {
   gaugeFill: document.getElementById('gaugeFill'),
   gaugeThreshold: document.getElementById('gaugeThreshold'),
   gaugeStatus: document.getElementById('gaugeStatus'),
+  summaryCard: document.getElementById('summaryCard'),
+  summaryList: document.getElementById('summaryList'),
+  summaryEmpty: document.getElementById('summaryEmpty'),
   catalogCard: document.getElementById('catalogCard'),
   tabBar: document.getElementById('tabBar'),
   itemList: document.getElementById('itemList'),
@@ -347,6 +391,43 @@ function renderGauge(){
   els.saveBtn.disabled = false;
 }
 
+function renderSummary(){
+  if (!state.currentMember){ els.summaryCard.style.display='none'; return; }
+  els.summaryCard.style.display = 'block';
+
+  const entries = Object.keys(state.selections)
+    .map(name=>{
+      const item = state.items.find(it=>it.name===name);
+      const qty = state.selections[name];
+      return (item && qty>0) ? { item, qty } : null;
+    })
+    .filter(Boolean);
+
+  els.summaryEmpty.style.display = entries.length ? 'none' : 'block';
+
+  els.summaryList.innerHTML = entries.map(({item, qty})=>`
+    <div class="summary-row">
+      <div>
+        <div class="item-name">${escapeHtml(item.name)}</div>
+        <div class="item-meta">${escapeHtml(item.unit || '')}</div>
+      </div>
+      <div class="s-price">${vnd(item.price)}</div>
+      <div class="s-qty">× ${qty}</div>
+      <div class="s-subtotal">${vnd(item.price*qty)}</div>
+      <button type="button" class="s-remove" data-name="${escapeHtml(item.name)}" aria-label="Bỏ chọn ${escapeHtml(item.name)}">×</button>
+    </div>
+  `).join('');
+
+  els.summaryList.querySelectorAll('.s-remove').forEach(btn=>{
+    btn.onclick = ()=>{
+      delete state.selections[btn.getAttribute('data-name')];
+      renderGauge();
+      renderSummary();
+      renderList();
+    };
+  });
+}
+
 function renderTabs(){
   els.tabBar.innerHTML = '';
   ['Tất cả', ...state.categories].forEach(cat=>{
@@ -399,6 +480,7 @@ function renderList(){
       input.value = newQty;
       subEl.textContent = newQty>0 ? vnd(newQty*it.price) : '';
       renderGauge();
+      renderSummary();
     }
     minusBtn.onclick = ()=>apply((Number(input.value)||0)-1);
     plusBtn.onclick = ()=>apply((Number(input.value)||0)+1);
@@ -447,12 +529,13 @@ async function loadCatalog(){
 }
 
 async function loadMember(name){
-  if (!name){ state.currentMember=null; state.selections={}; renderGauge(); renderList(); return; }
+  if (!name){ state.currentMember=null; state.selections={}; renderGauge(); renderSummary(); renderList(); return; }
   const res = await apiGet({ action:'member', name });
   if (!res.ok){ alert('Lỗi tải dữ liệu thành viên: ' + res.error); return; }
   state.currentMember = { name: res.name, budget: res.budget };
   state.selections = res.selections || {};
   renderGauge();
+  renderSummary();
   renderList();
 }
 
