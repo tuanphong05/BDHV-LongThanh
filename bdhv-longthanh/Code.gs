@@ -22,9 +22,20 @@
  * hãy để trình duyệt tự gửi "text/plain" (xem site/index.html). Nếu đổi sang
  * application/json, trình duyệt sẽ gửi preflight OPTIONS mà Apps Script không
  * hỗ trợ, request sẽ bị lỗi CORS.
+ * CẬP NHẬT GIÁ TỰ ĐỘNG (action=updatePrices):
+ * Cho phép ghi trực tiếp giá mới vào cột "Đơn giá" bằng cách gọi URL Web App dạng:
+ *   .../exec?action=updatePrices&key=ADMIN_KEY&items=[{"name":"Tên hàng hoá đúng như sheet","price":33500}, ...]
+ * (tham số items là JSON đã encode URL). Phải khớp đúng ADMIN_KEY bên dưới mới ghi được.
+ * Đây là cách Claude có thể tự cập nhật giá vào sheet "Tổng hợp" giúp anh mà không cần anh
+ * copy/paste tay — chỉ cần triển khai lại (New version) sau khi dán code này.
  */
 
 const SHEET_NAME = 'Tổng hợp'; // đổi nếu tên tab khác
+
+// Mã bí mật để xác thực khi cập nhật giá qua action=updatePrices — ĐỔI chuỗi này thành
+// một chuỗi riêng của anh, không chia sẻ công khai (khác với việc URL Web App vẫn "Anyone"
+// truy cập được, nhưng phải biết đúng mã này thì mới ghi/sửa được giá).
+const ADMIN_KEY = 'longthanh-bdhv-2026-doimatkhau';
 
 // ───────────────────────── Đọc cấu trúc bảng tính (tự động, không hard-code ô) ─────────────────────────
 
@@ -113,7 +124,7 @@ function readStructure_(sheet) {
     });
   }
 
-  return { data: data, nameRow: nameRow, budgetRow: budgetRow, members: members, items: items };
+  return { data: data, nameRow: nameRow, budgetRow: budgetRow, members: members, items: items, colPrice: colPrice };
 }
 
 // ───────────────────────── API ─────────────────────────
@@ -130,6 +141,32 @@ function doGet(e) {
         return { stt: it.stt, name: it.name, unit: it.unit, price: it.price, image: it.image, category: it.category };
       });
       return jsonOut_({ ok: true, members: members, items: items });
+    }
+
+    if (action === 'updatePrices') {
+      const key = e.parameter.key || '';
+      if (key !== ADMIN_KEY) return jsonOut_({ ok: false, error: 'Sai mã xác thực (key).' });
+
+      let list;
+      try {
+        list = JSON.parse(e.parameter.items || '[]'); // [{name, price}, ...]
+      } catch (err) {
+        return jsonOut_({ ok: false, error: 'Tham số items không phải JSON hợp lệ.' });
+      }
+
+      const updated = [];
+      const notFound = [];
+      list.forEach(function (row) {
+        const nm = String(row.name || '').trim();
+        const price = Number(row.price);
+        const item = struct.items.filter(function (it) { return it.name === nm; })[0];
+        if (!item || !price || price <= 0) { notFound.push(nm); return; }
+        sheet.getRange(item.row + 1, struct.colPrice + 1).setValue(price);
+        updated.push(nm);
+      });
+      SpreadsheetApp.flush();
+
+      return jsonOut_({ ok: true, updated: updated, notFound: notFound });
     }
 
     if (action === 'member') {
