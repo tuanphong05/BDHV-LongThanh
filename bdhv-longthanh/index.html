@@ -75,6 +75,15 @@
   }
   .card h2{font-size:14px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:12px;}
 
+  /* Treo "Tổng tiền đã chọn" cố định lên đầu trang khi cuộn xuống xem mặt hàng */
+  #gaugeCard{
+    position:sticky;
+    top:0;
+    z-index:30;
+    box-shadow:0 6px 18px rgba(20,30,35,.12);
+  }
+
+
   select, input[type=text]{
     width:100%;
     font-family:'Inter',sans-serif;
