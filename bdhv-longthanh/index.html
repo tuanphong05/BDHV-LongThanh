@@ -413,7 +413,16 @@ function renderGauge(){
     els.gaugeStatus.className = 'gauge-status short';
   }
   els.saveBtn.disabled = false;
+  updateScrollOffset();
 }
+
+function updateScrollOffset(){
+  // summaryCard cần chừa đúng khoảng trống bằng chiều cao gaugeCard (đang "dính" ở đầu trang)
+  // để khi cuộn tới, tiêu đề "Mặt hàng đã chọn" không bị gaugeCard đè lên.
+  const h = els.gaugeCard.offsetHeight;
+  els.summaryCard.style.scrollMarginTop = (h + 12) + 'px';
+}
+window.addEventListener('resize', ()=>{ if (state.currentMember) updateScrollOffset(); });
 
 function renderSummary(){
   if (!state.currentMember){ els.summaryCard.style.display='none'; return; }
