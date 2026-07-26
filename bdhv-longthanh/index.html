@@ -22,6 +22,7 @@
     --amber-bg:#FBF0DF;
     --green:#2E7D52;
     --green-bg:#E4F2E9;
+    --blue-bg:#E7EEF2;
     --radius:10px;
     --shadow:0 1px 2px rgba(20,30,35,.06), 0 6px 20px rgba(20,30,35,.05);
   }
@@ -160,10 +161,23 @@
     grid-template-columns: 1fr auto auto;
     align-items:center;
     gap:10px 16px;
-    padding:12px 0;
+    padding:12px 10px;
+    margin:0 -10px;
+    border-radius:8px;
     border-bottom:1px solid var(--line);
   }
   .item-row:last-child{border-bottom:none;}
+  .item-row.selected{
+    background:var(--blue-bg);
+    box-shadow: inset 3px 0 0 0 var(--blue);
+    border-bottom-color:transparent;
+  }
+  .item-row.selected .item-name{color:var(--blue-deep); font-weight:700;}
+  .selected-badge{
+    display:inline-block; margin-left:8px; vertical-align:middle;
+    font-size:10.5px; font-weight:700; letter-spacing:.02em; color:#fff;
+    background:var(--blue); padding:2px 7px; border-radius:999px;
+  }
   .item-name{font-size:14.5px; font-weight:500;}
   .item-meta{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
   .item-price{font-size:13.5px; color:var(--ink-soft); text-align:right; min-width:92px;}
@@ -486,10 +500,10 @@ function renderList(){
   filtered.forEach(it=>{
     const qty = state.selections[it.name] || 0;
     const row = document.createElement('div');
-    row.className = 'item-row';
+    row.className = 'item-row' + (qty>0 ? ' selected' : '');
     row.innerHTML = `
       <div>
-        <div class="item-name">${escapeHtml(it.name)}</div>
+        <div class="item-name">${escapeHtml(it.name)}${qty>0 ? '<span class="selected-badge">✓ Đã chọn</span>' : ''}</div>
         <div class="item-meta">${escapeHtml(it.unit || '')}${it.category ? ' · '+escapeHtml(it.category) : ''}</div>
       </div>
       <div>
@@ -505,6 +519,7 @@ function renderList(){
     const [minusBtn, plusBtn] = row.querySelectorAll('.stepper button');
     const input = row.querySelector('.stepper input');
     const subEl = row.querySelector('.item-subtotal');
+    const nameEl = row.querySelector('.item-name');
 
     function apply(newQty){
       newQty = Math.max(0, Math.floor(Number(newQty)||0));
@@ -512,6 +527,8 @@ function renderList(){
       else state.selections[it.name] = newQty;
       input.value = newQty;
       subEl.textContent = newQty>0 ? vnd(newQty*it.price) : '';
+      row.classList.toggle('selected', newQty>0);
+      nameEl.innerHTML = escapeHtml(it.name) + (newQty>0 ? '<span class="selected-badge">✓ Đã chọn</span>' : '');
       renderGauge();
       renderSummary();
     }
