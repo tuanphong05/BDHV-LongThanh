@@ -230,12 +230,25 @@
   #saveMsg.ok{color:var(--green);}
   #saveMsg.err{color:#B3432B;}
 
+  .scroll-top-btn{
+    position:fixed; right:18px; bottom:84px;
+    width:48px; height:48px; border-radius:999px; border:none;
+    background:var(--blue-deep); color:#fff; font-size:20px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; z-index:40;
+    box-shadow:0 6px 16px rgba(20,30,35,.28);
+    transition:transform .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .scroll-top-btn:hover{background:var(--blue); box-shadow:0 8px 20px rgba(20,30,35,.32); transform:translateY(-2px);}
+  .scroll-top-btn:active{transform:translateY(0) scale(.95);}
+
   @media (max-width:520px){
     .item-row{grid-template-columns: 1fr; row-gap:8px;}
     .item-price, .item-subtotal{text-align:left;}
     .action-bar{flex-direction:column; align-items:stretch;}
     .summary-row{grid-template-columns: 1fr 34px 92px 24px;}
     .summary-row > *:nth-child(2){display:none;}
+    .scroll-top-btn{bottom:150px;}
   }
   @media (prefers-reduced-motion: reduce){
     .gauge-fill{transition:none;}
@@ -308,6 +321,10 @@
   <button id="saveBtn" disabled>Lưu lựa chọn</button>
 </div>
 
+<button id="scrollTopBtn" class="scroll-top-btn" style="display:none" title="Xem lại tổng tiền &amp; mặt hàng đã chọn" aria-label="Xem lại tổng tiền và mặt hàng đã chọn">
+  <span aria-hidden="true">↑</span>
+</button>
+
 <script>
 /* ====================== CẤU HÌNH ====================== */
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxYrHkBjCM_XURCczZ7HJLsbL9qD6VUQ2DqTL3Xkpzc6iUdzISQ0zikj29RrlsRWkrD4w/exec";
@@ -335,6 +352,7 @@ const els = {
   summaryCard: document.getElementById('summaryCard'),
   summaryList: document.getElementById('summaryList'),
   summaryEmpty: document.getElementById('summaryEmpty'),
+  scrollTopBtn: document.getElementById('scrollTopBtn'),
   catalogCard: document.getElementById('catalogCard'),
   tabBar: document.getElementById('tabBar'),
   itemList: document.getElementById('itemList'),
@@ -368,8 +386,9 @@ function currentTotal(){
 }
 
 function renderGauge(){
-  if (!state.currentMember){ els.gaugeCard.style.display='none'; return; }
+  if (!state.currentMember){ els.gaugeCard.style.display='none'; els.scrollTopBtn.style.display='none'; return; }
   els.gaugeCard.style.display='block';
+  els.scrollTopBtn.style.display='flex';
   const total = currentTotal();
   const budget = state.currentMember.budget || 0;
   const scaleMax = Math.max(budget * 1.3, total * 1.08, 1);
@@ -545,6 +564,10 @@ async function loadMember(name){
 }
 
 els.memberSelect.onchange = ()=> loadMember(els.memberSelect.value);
+
+els.scrollTopBtn.onclick = ()=>{
+  els.summaryCard.scrollIntoView({ behavior:'smooth', block:'start' });
+};
 els.searchBox.oninput = ()=>{ state.search = els.searchBox.value; renderList(); };
 
 els.saveBtn.onclick = async ()=>{
