@@ -24,10 +24,12 @@
  * hỗ trợ, request sẽ bị lỗi CORS.
  * CẬP NHẬT GIÁ TỰ ĐỘNG (action=updatePrices):
  * Cho phép ghi trực tiếp giá mới vào cột "Đơn giá" bằng cách gọi URL Web App dạng:
- *   .../exec?action=updatePrices&key=ADMIN_KEY&items=[{"name":"Tên hàng hoá đúng như sheet","price":33500}, ...]
- * (tham số items là JSON đã encode URL). Phải khớp đúng ADMIN_KEY bên dưới mới ghi được.
- * Đây là cách Claude có thể tự cập nhật giá vào sheet "Tổng hợp" giúp anh mà không cần anh
- * copy/paste tay — chỉ cần triển khai lại (New version) sau khi dán code này.
+ *   .../exec?action=updatePrices&key=ADMIN_KEY&items=STT:GIA,STT:GIA,...
+ *   ví dụ: .../exec?action=updatePrices&key=xxx&items=1:33500,6:146000,9:27500
+ * (khớp theo cột STT trong sheet, không phải tên, để URL ngắn gọn). Phải khớp đúng
+ * ADMIN_KEY bên dưới mới ghi được. Đây là cách Claude có thể tự cập nhật giá vào sheet
+ * "Tổng hợp" giúp anh mà không cần anh copy/paste tay — chỉ cần triển khai lại (New
+ * version) sau khi dán code này.
  */
 
 const SHEET_NAME = 'Tổng hợp'; // đổi nếu tên tab khác
@@ -147,22 +149,20 @@ function doGet(e) {
       const key = e.parameter.key || '';
       if (key !== ADMIN_KEY) return jsonOut_({ ok: false, error: 'Sai mã xác thực (key).' });
 
-      let list;
-      try {
-        list = JSON.parse(e.parameter.items || '[]'); // [{name, price}, ...]
-      } catch (err) {
-        return jsonOut_({ ok: false, error: 'Tham số items không phải JSON hợp lệ.' });
-      }
+      // Định dạng gọn để URL ngắn: "stt:gia,stt:gia,..."  ví dụ "1:33500,6:146000"
+      const raw = (e.parameter.items || '').trim();
+      const pairs = raw ? raw.split(',') : [];
 
       const updated = [];
       const notFound = [];
-      list.forEach(function (row) {
-        const nm = String(row.name || '').trim();
-        const price = Number(row.price);
-        const item = struct.items.filter(function (it) { return it.name === nm; })[0];
-        if (!item || !price || price <= 0) { notFound.push(nm); return; }
+      pairs.forEach(function (pair) {
+        const parts = pair.split(':');
+        const stt = String(parts[0] || '').trim();
+        const price = Number(parts[1]);
+        const item = struct.items.filter(function (it) { return String(it.stt).trim() === stt; })[0];
+        if (!item || !price || price <= 0) { notFound.push(stt); return; }
         sheet.getRange(item.row + 1, struct.colPrice + 1).setValue(price);
-        updated.push(nm);
+        updated.push({ stt: stt, name: item.name, price: price });
       });
       SpreadsheetApp.flush();
 
