@@ -75,6 +75,11 @@
     margin-bottom:16px;
   }
   .card h2{font-size:14px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:12px;}
+  .card.highlight{
+    background:linear-gradient(180deg, #EAF2F6, #E4EFF3);
+    border-color:#C7DCE4;
+  }
+  .card.highlight h2{color:var(--blue-deep);}
 
   /* Treo "Tổng tiền đã chọn" cố định lên đầu trang khi cuộn xuống xem mặt hàng */
   #gaugeCard{
@@ -307,7 +312,7 @@
     </select>
   </div>
 
-  <div class="card" id="gaugeCard" style="display:none">
+  <div class="card highlight" id="gaugeCard" style="display:none">
     <div class="gauge-readout">
       <div>
         <div class="label">Tổng tiền đã chọn</div>
@@ -322,7 +327,7 @@
     <div class="gauge-status" id="gaugeStatus"></div>
   </div>
 
-  <div class="card" id="summaryCard" style="display:none">
+  <div class="card highlight" id="summaryCard" style="display:none">
     <h2>Mặt hàng đã chọn</h2>
     <div class="summary-table" id="summaryTable">
       <div class="summary-row summary-head">
