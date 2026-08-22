@@ -55,7 +55,6 @@ const ADMIN_KEY = 'longthanh-bdhv-2026-doimatkhau';
 // OAuth Client ID tạo trong Google Cloud Console (Sign in with Google) — dán vào đây.
 // Dùng để xác thực idToken gửi lên từ trang web (site/index.html cũng cần đúng CLIENT_ID này).
 const GOOGLE_CLIENT_ID = '528511663233-7bl2346uoama1feoes82ik2nu608cb3a.apps.googleusercontent.com';
-'DÁN_CLIENT_ID_CỦA_ANH_VÀO_ĐÂY.apps.googleusercontent.com';
 
 // ───────────────────────── Đọc cấu trúc bảng tính (tự động, không hard-code ô) ─────────────────────────
 
