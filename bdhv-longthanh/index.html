@@ -76,17 +76,24 @@
   }
   .card h2{font-size:14px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:12px;}
   .card.highlight{
-    background:linear-gradient(180deg, #EAF2F6, #E4EFF3);
-    border-color:#C7DCE4;
+    background:linear-gradient(180deg, #FFF6E6, #FFECC7);
+    border-color:#E8B95C;
+    box-shadow:0 2px 12px rgba(200,127,30,.16), var(--shadow);
+    position:relative;
   }
-  .card.highlight h2{color:var(--blue-deep);}
+  .card.highlight::before{
+    content:'';
+    position:absolute; left:0; top:12px; bottom:12px; width:4px;
+    background:var(--amber); border-radius:0 3px 3px 0;
+  }
+  .card.highlight h2{color:#8A5518;}
 
   /* Treo "Tổng tiền đã chọn" cố định lên đầu trang khi cuộn xuống xem mặt hàng */
   #gaugeCard{
     position:sticky;
     top:0;
     z-index:30;
-    box-shadow:0 6px 18px rgba(20,30,35,.12);
+    box-shadow:0 6px 18px rgba(20,30,35,.12), 0 2px 12px rgba(200,127,30,.16);
   }
 
 
