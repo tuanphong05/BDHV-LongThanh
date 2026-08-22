@@ -39,6 +39,13 @@ const SHEET_NAME = 'Tổng hợp'; // đổi nếu tên tab khác
 // truy cập được, nhưng phải biết đúng mã này thì mới ghi/sửa được giá).
 const ADMIN_KEY = 'longthanh-bdhv-2026-doimatkhau';
 
+<<<<<<< HEAD
+=======
+// OAuth Client ID tạo trong Google Cloud Console (Sign in with Google) — dán vào đây.
+// Dùng để xác thực idToken gửi lên từ trang web (site/index.html cũng cần đúng CLIENT_ID này).
+const GOOGLE_CLIENT_ID = '528511663233-7bl2346uoama1feoes82ik2nu608cb3a.apps.googleusercontent.com';
+
+>>>>>>> ab46e55ec1ba9a6dac17cf6701f6660908d05511
 // ───────────────────────── Đọc cấu trúc bảng tính (tự động, không hard-code ô) ─────────────────────────
 
 function getSheet_() {
