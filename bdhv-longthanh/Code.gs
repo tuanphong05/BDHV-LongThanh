@@ -1,50 +1,33 @@
 /**
  * ĐĂNG KÝ MUA HIỆN VẬT BỒI DƯỠNG - TTKSKL LONG THÀNH
- * Backend Google Apps Script (container-bound với Google Sheet đăng ký)
+ * Backend Google Apps Script + Auth (đăng ký / đăng nhập / đổi / reset mật khẩu)
  *
- * ─────────────────────────────────────────────────────────────
- * CÁCH TRIỂN KHAI
- * ─────────────────────────────────────────────────────────────
- * 1. Mở Google Sheet đăng ký -> menu "Tiện ích mở rộng" (Extensions) -> "Apps Script"
- * 2. Xoá toàn bộ nội dung mặc định trong file Code.gs, dán nguyên văn file này vào
- * 3. Kiểm tra hằng số SHEET_NAME bên dưới đúng với tên tab chứa bảng đăng ký
- *    (mặc định là "Tổng hợp")
- * 4. Bấm "Triển khai" (Deploy) -> "Deployment mới" (New deployment)
- *      - Loại (Select type): Web app
- *      - Execute as: Me (tài khoản của anh)
- *      - Who has access: Anyone (để trang web gọi được, không cần đăng nhập Google)
- * 5. Copy "Web app URL" -> dán vào biến APPS_SCRIPT_URL trong file site/index.html
- * 6. Mỗi khi sửa code này, phải "Triển khai" > "Quản lý deployment" > sửa phiên bản
- *    (Edit) > New version, thì URL cũ mới nhận code mới.
+ * TRIỂN KHAI:
+ * 1. Sheet đăng ký -> Extensions -> Apps Script
+ * 2. Xoá code cũ, dán toàn bộ file này
+ * 3. SHEET_NAME đúng tên tab (mặc định "Tổng hợp")
+ * 4. Deploy -> New deployment -> Web app
+ *    Execute as: Me | Who has access: Anyone
+ * 5. Copy Web app URL -> dán vào APPS_SCRIPT_URL trong index.html
+ * 6. Mỗi lần sửa code: Manage deployments -> Edit -> New version
  *
- * LƯU Ý QUAN TRỌNG VỀ CORS:
- * Không thêm header "Content-Type: application/json" khi gọi fetch() từ web,
- * hãy để trình duyệt tự gửi "text/plain" (xem site/index.html). Nếu đổi sang
- * application/json, trình duyệt sẽ gửi preflight OPTIONS mà Apps Script không
- * hỗ trợ, request sẽ bị lỗi CORS.
- * CẬP NHẬT GIÁ TỰ ĐỘNG (action=updatePrices):
- * Cho phép ghi trực tiếp giá mới vào cột "Đơn giá" bằng cách gọi URL Web App dạng:
- *   .../exec?action=updatePrices&key=ADMIN_KEY&items=STT:GIA,STT:GIA,...
- *   ví dụ: .../exec?action=updatePrices&key=xxx&items=1:33500,6:146000,9:27500
- * (khớp theo cột STT trong sheet, không phải tên, để URL ngắn gọn). Phải khớp đúng
- * ADMIN_KEY bên dưới mới ghi được. Đây là cách Claude có thể tự cập nhật giá vào sheet
- * "Tổng hợp" giúp anh mà không cần anh copy/paste tay — chỉ cần triển khai lại (New
- * version) sau khi dán code này.
+ * CORS: không set Content-Type: application/json khi fetch từ web.
+ *
+ * AUTH:
+ * - Sheet "Auth" tự tạo: Tên | Hash | Salt | Ngày tạo
+ * - Reset: POST {action:'resetPassword', name, key:ADMIN_KEY}
+ * - Đổi mật khẩu: POST {action:'changePassword', name, oldPassword, newPassword}
+ * - updatePrices: ?action=updatePrices&key=ADMIN_KEY&items=STT:GIA,...
  */
 
-const SHEET_NAME = 'Tổng hợp'; // đổi nếu tên tab khác
-
-// Mã bí mật để xác thực khi cập nhật giá qua action=updatePrices — ĐỔI chuỗi này thành
-// một chuỗi riêng của anh, không chia sẻ công khai (khác với việc URL Web App vẫn "Anyone"
-// truy cập được, nhưng phải biết đúng mã này thì mới ghi/sửa được giá).
-const ADMIN_KEY = 'longthanh-bdhv-2026-doimatkhau';
-
-// ───────────────────────── Đọc cấu trúc bảng tính (tự động, không hard-code ô) ─────────────────────────
+const SHEET_NAME = 'Tổng hợp';
+const AUTH_SHEET_NAME = 'Auth';
+const ADMIN_KEY = 'bdhvlongthanh'; // ĐỔI thành mã bí mật riêng
 
 function getSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) throw new Error('Không tìm thấy sheet "' + SHEET_NAME + '". Kiểm tra lại SHEET_NAME trong Code.gs.');
+  if (!sheet) throw new Error('Không tìm thấy sheet "' + SHEET_NAME + '".');
   return sheet;
 }
 
@@ -53,7 +36,6 @@ function readStructure_(sheet) {
   const numRows = data.length;
   const numCols = data[0].length;
 
-  // 1) Tìm hàng "Họ và tên" và hàng "Mức chi bồi dưỡng..."
   let nameRow = -1, budgetRow = -1;
   for (let r = 0; r < numRows; r++) {
     for (let c = 0; c < numCols; c++) {
@@ -63,10 +45,9 @@ function readStructure_(sheet) {
     }
     if (nameRow >= 0 && budgetRow >= 0) break;
   }
-  if (nameRow < 0) throw new Error('Không tìm thấy hàng "Họ và tên" trong sheet "' + SHEET_NAME + '".');
+  if (nameRow < 0) throw new Error('Không tìm thấy hàng "Họ và tên".');
   if (budgetRow < 0) budgetRow = nameRow + 1;
 
-  // 2) Xác định cột bắt đầu/kết thúc của các thành viên
   let firstMemberCol = -1, lastMemberCol = -1;
   for (let c = 0; c < numCols; c++) {
     const val = String(data[nameRow][c]).trim();
@@ -75,18 +56,15 @@ function readStructure_(sheet) {
       lastMemberCol = c;
     }
   }
-  if (firstMemberCol < 0) throw new Error('Không tìm thấy tên thành viên trên hàng "Họ và tên".');
+  if (firstMemberCol < 0) throw new Error('Không tìm thấy tên thành viên.');
 
   const members = [];
   for (let c = firstMemberCol; c <= lastMemberCol; c++) {
     const name = String(data[nameRow][c]).trim();
     if (!name) continue;
-    const budget = Number(data[budgetRow][c]) || 0;
-    members.push({ name: name, col: c, budget: budget });
+    members.push({ name: name, col: c, budget: Number(data[budgetRow][c]) || 0 });
   }
 
-  // 3) Tìm hàng tiêu đề bảng hàng hoá: có cả "STT", "Tên hàng hoá", "Đơn giá"
-  //    Cột "Hình ảnh" là tuỳ chọn — có thì đọc, không có vẫn chạy bình thường.
   let itemHeaderRow = -1;
   let colSTT = -1, colName = -1, colUnit = -1, colPrice = -1, colImage = -1;
   for (let r = nameRow; r < numRows; r++) {
@@ -101,22 +79,18 @@ function readStructure_(sheet) {
     }
     if (hasStt && hasName && hasPrice) { itemHeaderRow = r; break; }
   }
-  if (itemHeaderRow < 0) throw new Error('Không tìm thấy hàng tiêu đề "STT / Tên hàng hoá / Đơn giá".');
+  if (itemHeaderRow < 0) throw new Error('Không tìm thấy hàng tiêu đề STT / Tên hàng hoá / Đơn giá.');
 
-  // 4) Đọc danh sách mặt hàng (bỏ qua hàng tiêu đề nhóm như "Sữa các loại")
   const items = [];
   let currentCategory = '';
   for (let r = itemHeaderRow + 1; r < numRows; r++) {
     const sttVal = String(data[r][colSTT]).trim();
     const nameVal = String(data[r][colName]).trim();
-    if (sttVal === '' && nameVal === '') continue; // hàng trắng
-    if (sttVal === '' && nameVal !== '') {          // hàng tiêu đề nhóm hàng
-      currentCategory = nameVal;
-      continue;
-    }
+    if (sttVal === '' && nameVal === '') continue;
+    if (sttVal === '' && nameVal !== '') { currentCategory = nameVal; continue; }
     if (nameVal === '') continue;
     items.push({
-      row: r, // index 0-based trong mảng data, dùng để ghi lại: getRange(row+1, col+1)
+      row: r,
       stt: data[r][colSTT],
       name: nameVal,
       unit: colUnit >= 0 ? String(data[r][colUnit]).trim() : '',
@@ -126,10 +100,86 @@ function readStructure_(sheet) {
     });
   }
 
-  return { data: data, nameRow: nameRow, budgetRow: budgetRow, members: members, items: items, colPrice: colPrice };
+  return { data: data, members: members, items: items, colPrice: colPrice };
 }
 
-// ───────────────────────── API ─────────────────────────
+function getAuthSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(AUTH_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(AUTH_SHEET_NAME);
+    sheet.getRange(1, 1, 1, 4).setValues([['Tên', 'Hash', 'Salt', 'Ngày tạo']]);
+    sheet.getRange(1, 1, 1, 4).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function hashPassword_(password, salt) {
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(password) + String(salt),
+    Utilities.Charset.UTF_8
+  );
+  return digest.map(function (b) {
+    return ('0' + (b & 0xFF).toString(16)).slice(-2);
+  }).join('');
+}
+
+function findAuthEntry_(name) {
+  const data = getAuthSheet_().getDataRange().getValues();
+  for (let r = 1; r < data.length; r++) {
+    if (String(data[r][0]).trim() === name) {
+      return { row: r + 1, hash: String(data[r][1]), salt: String(data[r][2]) };
+    }
+  }
+  return null;
+}
+
+function verifyPassword_(name, password) {
+  const entry = findAuthEntry_(name);
+  if (!entry) return false;
+  return hashPassword_(password, entry.salt) === entry.hash;
+}
+
+function registerPassword_(name, password) {
+  if (!password || String(password).length < 4) {
+    return { ok: false, error: 'Mật khẩu phải có ít nhất 4 ký tự.' };
+  }
+  if (findAuthEntry_(name)) {
+    return { ok: false, error: 'Tài khoản này đã có mật khẩu. Hãy đăng nhập.' };
+  }
+  const salt = Utilities.getUuid();
+  getAuthSheet_().appendRow([name, hashPassword_(password, salt), salt, new Date()]);
+  SpreadsheetApp.flush();
+  return { ok: true };
+}
+
+function changePassword_(name, oldPassword, newPassword) {
+  if (!newPassword || String(newPassword).length < 4) {
+    return { ok: false, error: 'Mật khẩu mới phải có ít nhất 4 ký tự.' };
+  }
+  const entry = findAuthEntry_(name);
+  if (!entry) return { ok: false, error: 'Tài khoản chưa đăng ký mật khẩu.' };
+  if (hashPassword_(oldPassword, entry.salt) !== entry.hash) {
+    return { ok: false, error: 'Mật khẩu hiện tại không đúng.' };
+  }
+  const salt = Utilities.getUuid();
+  const sheet = getAuthSheet_();
+  sheet.getRange(entry.row, 2).setValue(hashPassword_(newPassword, salt));
+  sheet.getRange(entry.row, 3).setValue(salt);
+  sheet.getRange(entry.row, 4).setValue(new Date());
+  SpreadsheetApp.flush();
+  return { ok: true };
+}
+
+function resetPassword_(name) {
+  const entry = findAuthEntry_(name);
+  if (!entry) return { ok: false, error: 'Không tìm thấy mật khẩu của: ' + name };
+  getAuthSheet_().deleteRow(entry.row);
+  SpreadsheetApp.flush();
+  return { ok: true, message: 'Đã xoá mật khẩu của «' + name + '». Người dùng có thể đăng ký lại.' };
+}
 
 function doGet(e) {
   try {
@@ -138,23 +188,34 @@ function doGet(e) {
     const struct = readStructure_(sheet);
 
     if (action === 'catalog') {
-      const members = struct.members.map(function (m) { return { name: m.name, budget: m.budget }; });
-      const items = struct.items.map(function (it) {
-        return { stt: it.stt, name: it.name, unit: it.unit, price: it.price, image: it.image, category: it.category };
+      return jsonOut_({
+        ok: true,
+        members: struct.members.map(function (m) { return { name: m.name, budget: m.budget }; }),
+        items: struct.items.map(function (it) {
+          return { stt: it.stt, name: it.name, unit: it.unit, price: it.price, image: it.image, category: it.category };
+        })
       });
-      return jsonOut_({ ok: true, members: members, items: items });
+    }
+
+    if (action === 'authStatus') {
+      const name = (e.parameter.name || '').trim();
+      if (!name) return jsonOut_({ ok: false, error: 'Thiếu tên.' });
+      const member = struct.members.filter(function (m) { return m.name === name; })[0];
+      if (!member) return jsonOut_({ ok: false, error: 'Không tìm thấy thành viên: ' + name });
+      return jsonOut_({ ok: true, name: name, hasPassword: !!findAuthEntry_(name) });
+    }
+
+    if (action === 'resetPassword') {
+      if ((e.parameter.key || '') !== ADMIN_KEY) return jsonOut_({ ok: false, error: 'Sai mã xác thực (key).' });
+      const name = (e.parameter.name || '').trim();
+      if (!name) return jsonOut_({ ok: false, error: 'Thiếu tên.' });
+      return jsonOut_(resetPassword_(name));
     }
 
     if (action === 'updatePrices') {
-      const key = e.parameter.key || '';
-      if (key !== ADMIN_KEY) return jsonOut_({ ok: false, error: 'Sai mã xác thực (key).' });
-
-      // Định dạng gọn để URL ngắn: "stt:gia,stt:gia,..."  ví dụ "1:33500,6:146000"
-      const raw = (e.parameter.items || '').trim();
-      const pairs = raw ? raw.split(',') : [];
-
-      const updated = [];
-      const notFound = [];
+      if ((e.parameter.key || '') !== ADMIN_KEY) return jsonOut_({ ok: false, error: 'Sai mã xác thực (key).' });
+      const pairs = ((e.parameter.items || '').trim()).split(',').filter(Boolean);
+      const updated = [], notFound = [];
       pairs.forEach(function (pair) {
         const parts = pair.split(':');
         const stt = String(parts[0] || '').trim();
@@ -165,28 +226,26 @@ function doGet(e) {
         updated.push({ stt: stt, name: item.name, price: price });
       });
       SpreadsheetApp.flush();
-
       return jsonOut_({ ok: true, updated: updated, notFound: notFound });
     }
 
     if (action === 'member') {
       const name = (e.parameter.name || '').trim();
+      const password = e.parameter.password || '';
       const member = struct.members.filter(function (m) { return m.name === name; })[0];
       if (!member) return jsonOut_({ ok: false, error: 'Không tìm thấy thành viên: ' + name });
-
+      if (!findAuthEntry_(name)) return jsonOut_({ ok: false, error: 'Tài khoản chưa đăng ký mật khẩu.' });
+      if (!verifyPassword_(name, password)) return jsonOut_({ ok: false, error: 'Mật khẩu không đúng.' });
       const selections = {};
       let tongTien = 0;
       struct.items.forEach(function (it) {
         const qty = Number(struct.data[it.row][member.col]) || 0;
-        if (qty > 0) {
-          selections[it.name] = qty;
-          tongTien += qty * it.price;
-        }
+        if (qty > 0) { selections[it.name] = qty; tongTien += qty * it.price; }
       });
       return jsonOut_({ ok: true, name: member.name, budget: member.budget, selections: selections, tongTien: tongTien });
     }
 
-    return jsonOut_({ ok: false, error: 'Tham số action không hợp lệ (dùng catalog hoặc member).' });
+    return jsonOut_({ ok: false, error: 'Tham số action không hợp lệ.' });
   } catch (err) {
     return jsonOut_({ ok: false, error: String(err) });
   }
@@ -195,25 +254,51 @@ function doGet(e) {
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
+    const action = String(body.action || 'save').trim();
     const name = String(body.name || '').trim();
-    const selections = body.selections || {}; // { "Tên hàng hoá đúng như trong sheet": soLuong }
-
+    const password = String(body.password || '');
     const sheet = getSheet_();
     const struct = readStructure_(sheet);
 
+    if (action === 'register') {
+      const member = struct.members.filter(function (m) { return m.name === name; })[0];
+      if (!member) return jsonOut_({ ok: false, error: 'Không tìm thấy thành viên: ' + name });
+      return jsonOut_(registerPassword_(name, password));
+    }
+
+    if (action === 'login') {
+      const member = struct.members.filter(function (m) { return m.name === name; })[0];
+      if (!member) return jsonOut_({ ok: false, error: 'Không tìm thấy thành viên: ' + name });
+      if (!findAuthEntry_(name)) return jsonOut_({ ok: false, error: 'Tài khoản chưa đăng ký mật khẩu.' });
+      if (!verifyPassword_(name, password)) return jsonOut_({ ok: false, error: 'Mật khẩu không đúng.' });
+      return jsonOut_({ ok: true, name: member.name, budget: member.budget });
+    }
+
+    if (action === 'changePassword') {
+      const member = struct.members.filter(function (m) { return m.name === name; })[0];
+      if (!member) return jsonOut_({ ok: false, error: 'Không tìm thấy thành viên: ' + name });
+      return jsonOut_(changePassword_(name, String(body.oldPassword || ''), String(body.newPassword || '')));
+    }
+
+    if (action === 'resetPassword') {
+      if (String(body.key || '') !== ADMIN_KEY) return jsonOut_({ ok: false, error: 'Sai mã xác thực (key).' });
+      if (!name) return jsonOut_({ ok: false, error: 'Thiếu tên.' });
+      return jsonOut_(resetPassword_(name));
+    }
+
     const member = struct.members.filter(function (m) { return m.name === name; })[0];
     if (!member) return jsonOut_({ ok: false, error: 'Không tìm thấy thành viên: ' + name });
+    if (!findAuthEntry_(name)) return jsonOut_({ ok: false, error: 'Tài khoản chưa đăng ký mật khẩu.' });
+    if (!verifyPassword_(name, password)) return jsonOut_({ ok: false, error: 'Mật khẩu không đúng. Không thể lưu.' });
 
-    // Ghi đè toàn bộ lựa chọn của thành viên này (mặt hàng không có trong selections -> để trống)
+    const selections = body.selections || {};
     let tongTien = 0;
     struct.items.forEach(function (it) {
       const qty = Number(selections[it.name]) || 0;
       sheet.getRange(it.row + 1, member.col + 1).setValue(qty === 0 ? '' : qty);
       tongTien += qty * it.price;
     });
-
     SpreadsheetApp.flush();
-
     return jsonOut_({ ok: true, name: member.name, budget: member.budget, tongTien: tongTien });
   } catch (err) {
     return jsonOut_({ ok: false, error: String(err) });
@@ -224,12 +309,7 @@ function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-// ───────────────────────── Kiểm tra nhanh trong Apps Script Editor ─────────────────────────
 function _test() {
-  const sheet = getSheet_();
-  const struct = readStructure_(sheet);
-  Logger.log('Số thành viên: %s', struct.members.length);
-  Logger.log('Số mặt hàng: %s', struct.items.length);
-  Logger.log(JSON.stringify(struct.members.slice(0, 3)));
-  Logger.log(JSON.stringify(struct.items.slice(0, 3)));
+  const struct = readStructure_(getSheet_());
+  Logger.log('Thành viên: %s | Mặt hàng: %s', struct.members.length, struct.items.length);
 }

@@ -262,6 +262,29 @@
   #saveMsg{font-size:13px; margin-left:12px;}
   #saveMsg.ok{color:var(--green);}
   #saveMsg.err{color:#B3432B;}
+  #authMsg.ok, #changePwMsg.ok, #resetMsg.ok{color:var(--green);}
+  #authMsg.err, #changePwMsg.err, #resetMsg.err{color:#B3432B;}
+  .btn-primary{
+    background:var(--blue-deep); color:#fff; border:none; border-radius:8px;
+    padding:11px 20px; font-size:14.5px; font-weight:600; cursor:pointer;
+    font-family:'Inter',sans-serif;
+  }
+  .btn-primary:disabled{opacity:.5; cursor:not-allowed;}
+  .btn-secondary{
+    background:#fff; color:var(--ink-soft); border:1px solid var(--line); border-radius:8px;
+    padding:11px 16px; font-size:14px; font-weight:500; cursor:pointer;
+    font-family:'Inter',sans-serif;
+  }
+  .btn-secondary:hover{background:var(--bg);}
+  .auth-actions{
+    display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:10px;
+  }
+  .auth-actions button.link-btn, button.link-btn{
+    background:none; border:none; color:var(--blue); font-size:13px;
+    cursor:pointer; padding:0; font-family:'Inter',sans-serif; text-decoration:underline;
+  }
+  .auth-fields{display:flex; flex-direction:column; gap:10px; max-width:360px;}
+
 
   .scroll-top-btn{
     position:fixed; right:18px; bottom:84px;
@@ -317,7 +340,62 @@
     <select id="memberSelect">
       <option value="">— Chọn tên của anh/chị —</option>
     </select>
+    <div class="auth-actions" id="loggedInBar" style="display:none">
+      <span style="font-size:13.5px; color:var(--ink-soft);">Đã đăng nhập: <b id="loggedInName"></b></span>
+      <button type="button" class="link-btn" id="showChangePwBtn">Đổi mật khẩu</button>
+      <button type="button" class="link-btn" id="logoutBtn">Đăng xuất</button>
+    </div>
   </div>
+
+  <!-- Đăng nhập / Đăng ký -->
+  <div class="card" id="authCard" style="display:none">
+    <h2 id="authTitle">Đăng nhập</h2>
+    <p id="authHint" style="font-size:13.5px; color:var(--ink-soft); margin:0 0 12px 0;"></p>
+    <div class="auth-fields">
+      <input type="password" id="passwordInput" placeholder="Nhập mật khẩu" autocomplete="current-password" />
+      <input type="password" id="passwordConfirm" placeholder="Nhập lại mật khẩu" style="display:none" autocomplete="new-password" />
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button type="button" id="authBtn" class="btn-primary">Đăng nhập</button>
+        <button type="button" id="showResetBtn" class="link-btn" style="display:none">Quên mật khẩu?</button>
+        <span id="authMsg" style="font-size:13px;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reset mật khẩu (admin) -->
+  <div class="card" id="resetCard" style="display:none">
+    <h2>Reset mật khẩu (Admin)</h2>
+    <p style="font-size:13.5px; color:var(--ink-soft); margin:0 0 12px 0;">
+      Nhập <b>mã admin (ADMIN_KEY)</b> để xoá mật khẩu của người dùng đã chọn.
+      Sau khi reset, người đó sẽ đăng ký mật khẩu mới như lần đầu.
+    </p>
+    <div class="auth-fields">
+      <input type="text" id="resetNameInput" placeholder="Họ và tên người cần reset" readonly />
+      <input type="password" id="adminKeyInput" placeholder="Mã admin (ADMIN_KEY)" autocomplete="off" />
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button type="button" id="resetBtn" class="btn-primary">Reset mật khẩu</button>
+        <button type="button" id="cancelResetBtn" class="btn-secondary">Huỷ</button>
+        <span id="resetMsg" style="font-size:13px;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Đổi mật khẩu -->
+  <div class="card" id="changePwCard" style="display:none">
+    <h2>Đổi mật khẩu</h2>
+    <p style="font-size:13.5px; color:var(--ink-soft); margin:0 0 12px 0;">Nhập mật khẩu hiện tại và mật khẩu mới (ít nhất 4 ký tự).</p>
+    <div class="auth-fields">
+      <input type="password" id="oldPasswordInput" placeholder="Mật khẩu hiện tại" autocomplete="current-password" />
+      <input type="password" id="newPasswordInput" placeholder="Mật khẩu mới" autocomplete="new-password" />
+      <input type="password" id="newPasswordConfirm" placeholder="Nhập lại mật khẩu mới" autocomplete="new-password" />
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button type="button" id="changePwBtn" class="btn-primary">Đổi mật khẩu</button>
+        <button type="button" id="cancelChangePwBtn" class="btn-secondary">Huỷ</button>
+        <span id="changePwMsg" style="font-size:13px;"></span>
+      </div>
+    </div>
+  </div>
+
 
   <div class="card highlight" id="gaugeCard" style="display:none">
     <div class="gauge-readout">
@@ -379,14 +457,41 @@ const state = {
   items: [],
   categories: [],
   activeCategory: 'Tất cả',
-  selections: {},      // { "Tên hàng hoá": soLuong }
-  currentMember: null, // { name, budget }
-  search: ''
+  selections: {},
+  currentMember: null,
+  search: '',
+  password: '',
+  authMode: null
 };
 
 const els = {
   setupBanner: document.getElementById('setupBanner'),
   memberSelect: document.getElementById('memberSelect'),
+  loggedInBar: document.getElementById('loggedInBar'),
+  loggedInName: document.getElementById('loggedInName'),
+  showChangePwBtn: document.getElementById('showChangePwBtn'),
+  logoutBtn: document.getElementById('logoutBtn'),
+  authCard: document.getElementById('authCard'),
+  authTitle: document.getElementById('authTitle'),
+  authHint: document.getElementById('authHint'),
+  passwordInput: document.getElementById('passwordInput'),
+  passwordConfirm: document.getElementById('passwordConfirm'),
+  authBtn: document.getElementById('authBtn'),
+  authMsg: document.getElementById('authMsg'),
+  showResetBtn: document.getElementById('showResetBtn'),
+  resetCard: document.getElementById('resetCard'),
+  resetNameInput: document.getElementById('resetNameInput'),
+  adminKeyInput: document.getElementById('adminKeyInput'),
+  resetBtn: document.getElementById('resetBtn'),
+  cancelResetBtn: document.getElementById('cancelResetBtn'),
+  resetMsg: document.getElementById('resetMsg'),
+  changePwCard: document.getElementById('changePwCard'),
+  oldPasswordInput: document.getElementById('oldPasswordInput'),
+  newPasswordInput: document.getElementById('newPasswordInput'),
+  newPasswordConfirm: document.getElementById('newPasswordConfirm'),
+  changePwBtn: document.getElementById('changePwBtn'),
+  cancelChangePwBtn: document.getElementById('cancelChangePwBtn'),
+  changePwMsg: document.getElementById('changePwMsg'),
   gaugeCard: document.getElementById('gaugeCard'),
   totalValue: document.getElementById('totalValue'),
   budgetValue: document.getElementById('budgetValue'),
@@ -409,7 +514,6 @@ const els = {
 
 function vnd(n){ return Math.round(n).toLocaleString('vi-VN') + ' ₫'; }
 
-// Icon hộp hàng đơn giản, dùng khi mặt hàng chưa có ảnh hoặc ảnh không tải được
 const THUMB_PLACEHOLDER = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
 
 async function apiGet(params){
@@ -418,7 +522,6 @@ async function apiGet(params){
   return res.json();
 }
 async function apiPost(body){
-  // Không set Content-Type thủ công để tránh preflight CORS bị Apps Script chặn
   const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify(body) });
   return res.json();
 }
@@ -426,8 +529,7 @@ async function apiPost(body){
 function currentTotal(){
   let total = 0;
   state.items.forEach(it=>{
-    const qty = state.selections[it.name] || 0;
-    total += qty * it.price;
+    total += (state.selections[it.name] || 0) * it.price;
   });
   return total;
 }
@@ -439,20 +541,15 @@ function renderGauge(){
   const total = currentTotal();
   const budget = state.currentMember.budget || 0;
   const scaleMax = Math.max(budget * 1.3, total * 1.08, 1);
-  const fillPct = Math.min(total/scaleMax, 1) * 100;
-  const thresholdPct = Math.min(budget/scaleMax, 1) * 100;
-
   els.totalValue.textContent = vnd(total);
   els.budgetValue.textContent = vnd(budget);
-  els.gaugeFill.style.width = fillPct + '%';
-  els.gaugeThreshold.style.left = thresholdPct + '%';
+  els.gaugeFill.style.width = (Math.min(total/scaleMax, 1) * 100) + '%';
+  els.gaugeThreshold.style.left = (Math.min(budget/scaleMax, 1) * 100) + '%';
   els.footTotal.textContent = vnd(total);
-
   const reached = total >= budget && budget > 0;
   els.gaugeFill.classList.toggle('reached', reached);
-  if (budget === 0){
-    els.gaugeStatus.textContent = '';
-  } else if (reached){
+  if (budget === 0) els.gaugeStatus.textContent = '';
+  else if (reached){
     els.gaugeStatus.textContent = `✓ Đã đủ mức bồi dưỡng — dư ${vnd(total-budget)}`;
     els.gaugeStatus.className = 'gauge-status ok';
   } else {
@@ -464,17 +561,13 @@ function renderGauge(){
 }
 
 function updateScrollOffset(){
-  // summaryCard cần chừa đúng khoảng trống bằng chiều cao gaugeCard (đang "dính" ở đầu trang)
-  // để khi cuộn tới, tiêu đề "Mặt hàng đã chọn" không bị gaugeCard đè lên.
-  const h = els.gaugeCard.offsetHeight;
-  els.summaryCard.style.scrollMarginTop = (h + 12) + 'px';
+  els.summaryCard.style.scrollMarginTop = (els.gaugeCard.offsetHeight + 12) + 'px';
 }
 window.addEventListener('resize', ()=>{ if (state.currentMember) updateScrollOffset(); });
 
 function renderSummary(){
   if (!state.currentMember){ els.summaryCard.style.display='none'; return; }
   els.summaryCard.style.display = 'block';
-
   const entries = Object.keys(state.selections)
     .map(name=>{
       const item = state.items.find(it=>it.name===name);
@@ -482,9 +575,7 @@ function renderSummary(){
       return (item && qty>0) ? { item, qty } : null;
     })
     .filter(Boolean);
-
   els.summaryEmpty.style.display = entries.length ? 'none' : 'block';
-
   els.summaryList.innerHTML = entries.map(({item, qty})=>`
     <div class="summary-row">
       <div>
@@ -494,16 +585,13 @@ function renderSummary(){
       <div class="s-price">${vnd(item.price)}</div>
       <div class="s-qty">× ${qty}</div>
       <div class="s-subtotal">${vnd(item.price*qty)}</div>
-      <button type="button" class="s-remove" data-name="${escapeHtml(item.name)}" aria-label="Bỏ chọn ${escapeHtml(item.name)}" title="Bỏ chọn mặt hàng này">×</button>
+      <button type="button" class="s-remove" data-name="${escapeHtml(item.name)}" title="Bỏ chọn">×</button>
     </div>
   `).join('');
-
   els.summaryList.querySelectorAll('.s-remove').forEach(btn=>{
     btn.onclick = ()=>{
       delete state.selections[btn.getAttribute('data-name')];
-      renderGauge();
-      renderSummary();
-      renderList();
+      renderGauge(); renderSummary(); renderList();
     };
   });
 }
@@ -526,10 +614,8 @@ function renderList(){
     const matchQ = !q || it.name.toLowerCase().includes(q);
     return matchCat && matchQ;
   });
-
   els.itemList.innerHTML = '';
   els.emptyNote.style.display = filtered.length ? 'none' : 'block';
-
   filtered.forEach(it=>{
     const qty = state.selections[it.name] || 0;
     const row = document.createElement('div');
@@ -542,11 +628,11 @@ function renderList(){
       </div>
       <div>
         <div class="item-price mono">${vnd(it.price)}</div>
-        <div class="item-subtotal mono" id="sub-${cssSafe(it.name)}">${qty>0 ? vnd(qty*it.price):''}</div>
+        <div class="item-subtotal mono">${qty>0 ? vnd(qty*it.price):''}</div>
       </div>
       <div class="stepper">
         <button type="button" aria-label="Giảm">−</button>
-        <input type="text" inputmode="numeric" value="${qty}" aria-label="Số lượng ${escapeHtml(it.name)}"/>
+        <input type="text" inputmode="numeric" value="${qty}" />
         <button type="button" aria-label="Tăng">+</button>
       </div>
     `;
@@ -556,7 +642,6 @@ function renderList(){
     const input = row.querySelector('.stepper input');
     const subEl = row.querySelector('.item-subtotal');
     const nameEl = row.querySelector('.item-name');
-
     function apply(newQty){
       newQty = Math.max(0, Math.floor(Number(newQty)||0));
       if (newQty === 0) delete state.selections[it.name];
@@ -565,13 +650,11 @@ function renderList(){
       subEl.textContent = newQty>0 ? vnd(newQty*it.price) : '';
       row.classList.toggle('selected', newQty>0);
       nameEl.innerHTML = escapeHtml(it.name) + (newQty>0 ? '<span class="selected-badge">✓ Đã chọn</span>' : '');
-      renderGauge();
-      renderSummary();
+      renderGauge(); renderSummary();
     }
     minusBtn.onclick = ()=>apply((Number(input.value)||0)-1);
     plusBtn.onclick = ()=>apply((Number(input.value)||0)+1);
     input.onchange = ()=>apply(input.value);
-
     els.itemList.appendChild(row);
   });
 }
@@ -579,10 +662,7 @@ function renderList(){
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
-function cssSafe(s){ return String(s).replace(/[^a-zA-Z0-9]/g,'_'); }
 
-// Chia nhân viên thành nhóm theo số thứ tự (đúng thứ tự cột trong sheet "Tổng hợp").
-// Đổi các mốc "from/to" bên dưới nếu danh sách nhân viên trong sheet thay đổi sau này.
 const MEMBER_GROUPS = [
   { label: 'ATCO',  from: 1,  to: 15 },
   { label: 'ATSEP', from: 16, to: 40 },
@@ -592,7 +672,7 @@ const MEMBER_GROUPS = [
 function renderMemberOptions(){
   return MEMBER_GROUPS.map(g=>{
     const opts = state.members
-      .map((m, i)=>({ m: m, num: i+1 }))
+      .map((m, i)=>({ m, num: i+1 }))
       .filter(({num})=> num >= g.from && num <= g.to)
       .map(({m, num})=>`<option value="${escapeHtml(m.name)}">${num}. ${escapeHtml(m.name)}</option>`)
       .join('');
@@ -606,26 +686,226 @@ async function loadCatalog(){
   state.members = res.members;
   state.items = res.items;
   state.categories = [...new Set(res.items.map(i=>i.category).filter(Boolean))];
-
   els.memberSelect.innerHTML = '<option value="">— Chọn tên của anh/chị —</option>' + renderMemberOptions();
-
   renderTabs();
   els.catalogCard.style.display = 'block';
   renderList();
 }
 
-async function loadMember(name){
-  if (!name){ state.currentMember=null; state.selections={}; renderGauge(); renderSummary(); renderList(); return; }
-  const res = await apiGet({ action:'member', name });
-  if (!res.ok){ alert('Lỗi tải dữ liệu thành viên: ' + res.error); return; }
-  state.currentMember = { name: res.name, budget: res.budget };
-  state.selections = res.selections || {};
-  renderGauge();
-  renderSummary();
-  renderList();
+function hideAuthUI(){
+  els.authCard.style.display = 'none';
+  els.passwordInput.value = '';
+  els.passwordConfirm.value = '';
+  els.authMsg.textContent = '';
+  els.authMsg.className = '';
+  state.authMode = null;
+  if (els.showResetBtn) els.showResetBtn.style.display = 'none';
+}
+function hideChangePwUI(){
+  els.changePwCard.style.display = 'none';
+  els.oldPasswordInput.value = '';
+  els.newPasswordInput.value = '';
+  els.newPasswordConfirm.value = '';
+  els.changePwMsg.textContent = '';
+  els.changePwMsg.className = '';
+}
+function hideResetUI(){
+  els.resetCard.style.display = 'none';
+  els.adminKeyInput.value = '';
+  els.resetMsg.textContent = '';
+  els.resetMsg.className = '';
 }
 
-els.memberSelect.onchange = ()=> loadMember(els.memberSelect.value);
+function showAuthUI(mode, name){
+  state.authMode = mode;
+  hideChangePwUI(); hideResetUI();
+  els.authCard.style.display = 'block';
+  els.passwordInput.value = '';
+  els.passwordConfirm.value = '';
+  els.authMsg.textContent = '';
+  els.authMsg.className = '';
+  if (mode === 'register'){
+    els.authTitle.textContent = 'Đăng ký mật khẩu lần đầu';
+    els.authHint.textContent = 'Đây là lần đầu «' + name + '» truy cập. Hãy tạo mật khẩu (ít nhất 4 ký tự).';
+    els.passwordConfirm.style.display = 'block';
+    els.passwordInput.placeholder = 'Tạo mật khẩu mới';
+    els.authBtn.textContent = 'Đăng ký mật khẩu';
+    els.showResetBtn.style.display = 'none';
+  } else {
+    els.authTitle.textContent = 'Đăng nhập';
+    els.authHint.textContent = 'Nhập mật khẩu đã đăng ký cho «' + name + '».';
+    els.passwordConfirm.style.display = 'none';
+    els.passwordInput.placeholder = 'Nhập mật khẩu';
+    els.authBtn.textContent = 'Đăng nhập';
+    els.showResetBtn.style.display = 'inline';
+  }
+  setTimeout(()=> els.passwordInput.focus(), 50);
+}
+
+function setLoggedInBar(name){
+  if (name){
+    els.loggedInBar.style.display = 'flex';
+    els.loggedInName.textContent = name;
+  } else {
+    els.loggedInBar.style.display = 'none';
+    els.loggedInName.textContent = '';
+  }
+}
+
+function resetMemberUI(){
+  state.currentMember = null;
+  state.selections = {};
+  state.password = '';
+  hideAuthUI(); hideChangePwUI(); hideResetUI();
+  setLoggedInBar(null);
+  renderGauge(); renderSummary(); renderList();
+  els.saveBtn.disabled = true;
+  els.saveMsg.textContent = '';
+}
+
+async function onMemberSelected(name){
+  if (!name){ resetMemberUI(); return; }
+  state.currentMember = null;
+  state.selections = {};
+  state.password = '';
+  hideChangePwUI(); hideResetUI();
+  setLoggedInBar(null);
+  renderGauge(); renderSummary(); renderList();
+  els.saveBtn.disabled = true;
+  try{
+    const res = await apiGet({ action: 'authStatus', name });
+    if (!res.ok){ alert('Lỗi: ' + res.error); return; }
+    if (res.hasPassword) showAuthUI('login', name);
+    else showAuthUI('register', name);
+  }catch(err){
+    alert('Không kết nối được máy chủ: ' + err.message);
+  }
+}
+
+async function doAuth(){
+  const name = els.memberSelect.value;
+  if (!name) return;
+  const password = els.passwordInput.value;
+  const confirm = els.passwordConfirm.value;
+  els.authMsg.textContent = 'Đang xử lý…';
+  els.authMsg.className = '';
+  els.authBtn.disabled = true;
+  try{
+    if (state.authMode === 'register'){
+      if (password.length < 4){ els.authMsg.textContent = 'Mật khẩu phải có ít nhất 4 ký tự.'; els.authMsg.className = 'err'; return; }
+      if (password !== confirm){ els.authMsg.textContent = 'Hai lần nhập mật khẩu không khớp.'; els.authMsg.className = 'err'; return; }
+      const res = await apiPost({ action: 'register', name, password });
+      if (!res.ok) throw new Error(res.error || 'Đăng ký thất bại');
+      state.password = password;
+      hideAuthUI();
+      await loadMemberData(name, password);
+    } else {
+      const res = await apiPost({ action: 'login', name, password });
+      if (!res.ok) throw new Error(res.error || 'Đăng nhập thất bại');
+      state.password = password;
+      hideAuthUI();
+      await loadMemberData(name, password);
+    }
+  }catch(err){
+    els.authMsg.textContent = '✗ ' + err.message;
+    els.authMsg.className = 'err';
+  }finally{
+    els.authBtn.disabled = false;
+  }
+}
+
+async function loadMemberData(name, password){
+  const res = await apiGet({ action: 'member', name, password });
+  if (!res.ok){
+    alert('Lỗi tải dữ liệu: ' + res.error);
+    state.password = '';
+    setLoggedInBar(null);
+    return;
+  }
+  state.currentMember = { name: res.name, budget: res.budget };
+  state.selections = res.selections || {};
+  setLoggedInBar(res.name);
+  renderGauge(); renderSummary(); renderList();
+}
+
+async function doChangePassword(){
+  if (!state.currentMember || !state.password) return;
+  const oldPassword = els.oldPasswordInput.value;
+  const newPassword = els.newPasswordInput.value;
+  const confirm = els.newPasswordConfirm.value;
+  els.changePwMsg.textContent = 'Đang xử lý…';
+  els.changePwMsg.className = '';
+  els.changePwBtn.disabled = true;
+  try{
+    if (newPassword.length < 4){ els.changePwMsg.textContent = 'Mật khẩu mới phải có ít nhất 4 ký tự.'; els.changePwMsg.className = 'err'; return; }
+    if (newPassword !== confirm){ els.changePwMsg.textContent = 'Hai lần nhập mật khẩu mới không khớp.'; els.changePwMsg.className = 'err'; return; }
+    const res = await apiPost({
+      action: 'changePassword',
+      name: state.currentMember.name,
+      oldPassword, newPassword
+    });
+    if (!res.ok) throw new Error(res.error || 'Đổi mật khẩu thất bại');
+    state.password = newPassword;
+    els.changePwMsg.textContent = '✓ Đã đổi mật khẩu thành công.';
+    els.changePwMsg.className = 'ok';
+    els.oldPasswordInput.value = '';
+    els.newPasswordInput.value = '';
+    els.newPasswordConfirm.value = '';
+    setTimeout(hideChangePwUI, 1500);
+  }catch(err){
+    els.changePwMsg.textContent = '✗ ' + err.message;
+    els.changePwMsg.className = 'err';
+  }finally{
+    els.changePwBtn.disabled = false;
+  }
+}
+
+async function doResetPassword(){
+  const name = (els.resetNameInput.value.trim() || els.memberSelect.value);
+  const key = els.adminKeyInput.value;
+  if (!name){ els.resetMsg.textContent = 'Chưa chọn tên người cần reset.'; els.resetMsg.className = 'err'; return; }
+  if (!key){ els.resetMsg.textContent = 'Nhập mã admin (ADMIN_KEY).'; els.resetMsg.className = 'err'; return; }
+  els.resetMsg.textContent = 'Đang xử lý…';
+  els.resetMsg.className = '';
+  els.resetBtn.disabled = true;
+  try{
+    const res = await apiPost({ action: 'resetPassword', name, key });
+    if (!res.ok) throw new Error(res.error || 'Reset thất bại');
+    els.resetMsg.textContent = '✓ ' + (res.message || 'Đã reset mật khẩu.');
+    els.resetMsg.className = 'ok';
+    els.adminKeyInput.value = '';
+    setTimeout(()=>{ hideResetUI(); showAuthUI('register', name); }, 1200);
+  }catch(err){
+    els.resetMsg.textContent = '✗ ' + err.message;
+    els.resetMsg.className = 'err';
+  }finally{
+    els.resetBtn.disabled = false;
+  }
+}
+
+els.memberSelect.onchange = ()=> onMemberSelected(els.memberSelect.value);
+els.authBtn.onclick = doAuth;
+els.passwordInput.addEventListener('keydown', e=>{ if (e.key === 'Enter') doAuth(); });
+els.passwordConfirm.addEventListener('keydown', e=>{ if (e.key === 'Enter') doAuth(); });
+
+els.showChangePwBtn.onclick = ()=>{ hideAuthUI(); hideResetUI(); els.changePwCard.style.display = 'block'; els.oldPasswordInput.focus(); };
+els.cancelChangePwBtn.onclick = hideChangePwUI;
+els.changePwBtn.onclick = doChangePassword;
+
+els.showResetBtn.onclick = ()=>{
+  hideAuthUI(); hideChangePwUI();
+  els.resetNameInput.value = els.memberSelect.value;
+  els.resetCard.style.display = 'block';
+  els.adminKeyInput.focus();
+};
+els.cancelResetBtn.onclick = ()=>{
+  hideResetUI();
+  if (els.memberSelect.value) showAuthUI('login', els.memberSelect.value);
+};
+els.resetBtn.onclick = doResetPassword;
+els.adminKeyInput.addEventListener('keydown', e=>{ if (e.key === 'Enter') doResetPassword(); });
+
+els.logoutBtn.onclick = ()=>{ els.memberSelect.value = ''; resetMemberUI(); };
 
 els.scrollTopBtn.onclick = ()=>{
   els.summaryCard.scrollIntoView({ behavior:'smooth', block:'start' });
@@ -633,12 +913,17 @@ els.scrollTopBtn.onclick = ()=>{
 els.searchBox.oninput = ()=>{ state.search = els.searchBox.value; renderList(); };
 
 els.saveBtn.onclick = async ()=>{
-  if (!state.currentMember) return;
+  if (!state.currentMember || !state.password) return;
   els.saveBtn.disabled = true;
   els.saveMsg.textContent = 'Đang lưu…';
   els.saveMsg.className = '';
   try{
-    const res = await apiPost({ name: state.currentMember.name, selections: state.selections });
+    const res = await apiPost({
+      action: 'save',
+      name: state.currentMember.name,
+      password: state.password,
+      selections: state.selections
+    });
     if (!res.ok) throw new Error(res.error || 'Lỗi không xác định');
     state.currentMember.budget = res.budget;
     els.saveMsg.textContent = '✓ Đã lưu lúc ' + new Date().toLocaleTimeString('vi-VN');
@@ -659,6 +944,7 @@ els.saveBtn.onclick = async ()=>{
   }
   loadCatalog();
 })();
+
 </script>
 </body>
 </html>
