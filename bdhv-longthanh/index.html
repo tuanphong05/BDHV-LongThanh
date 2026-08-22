@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --bg:#F3F4EF;
@@ -52,6 +53,27 @@
   }
   .topbar h1{font-size:clamp(20px,3vw,26px); font-weight:600; color:#fff;}
   .topbar .sub{font-size:13.5px; color:#B9CBD3;}
+  .topbar{position:relative;}
+  .signout-link{
+    position:absolute; top:20px; right:clamp(16px,4vw,40px);
+    background:none; border:1px solid #3E5A68; color:#CFE0E6;
+    font-size:12.5px; padding:6px 12px; border-radius:999px; cursor:pointer;
+  }
+  .signout-link:hover{background:#1D3A4A;}
+
+  .login-card{max-width:420px; margin-left:auto; margin-right:auto; text-align:center; padding-top:28px; padding-bottom:28px;}
+  .login-card h2{text-align:center;}
+  .login-desc{font-size:13.5px; color:var(--ink-soft); margin-bottom:18px;}
+  #googleSignInBtn{display:flex; justify-content:center; margin-bottom:10px;}
+  .login-status{font-size:13px; color:#B3432B; min-height:18px;}
+  .login-status.err{font-weight:600;}
+
+  .welcome-card{
+    display:flex; align-items:baseline; gap:10px;
+    padding-top:14px; padding-bottom:14px;
+  }
+  .welcome-label{font-size:12.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em;}
+  .welcome-name{font-family:'Space Grotesk',sans-serif; font-size:18px; font-weight:700; color:var(--blue-deep);}
 
   main{
     max-width:920px;
@@ -298,6 +320,7 @@
   <div class="eyebrow">TTKSKL Long Thành · Bồi dưỡng hiện vật</div>
   <h1>Đăng ký chọn mua hàng hoá</h1>
   <div class="sub">Giá tham chiếu theo Co.op Online — chọn hàng sao cho tổng tiền ≥ mức bồi dưỡng cá nhân</div>
+  <button id="signOutBtn" class="signout-link" style="display:none">Đăng xuất</button>
 </div>
 
 <main>
@@ -305,12 +328,22 @@
     ⚠️ Chưa cấu hình backend. Mở file <code>index.html</code>, tìm biến <code>APPS_SCRIPT_URL</code> ở cuối trang và dán URL Web App của Google Apps Script vào đó.
   </div>
 
-  <div class="card">
-    <h2>Nhân viên Trung tâm Kiểm soát không lưu Long Thành</h2>
-    <select id="memberSelect">
-      <option value="">— Chọn tên của anh/chị —</option>
-    </select>
+  <div class="banner" id="loginConfigBanner" style="display:none">
+    ⚠️ Trang này bắt buộc đăng nhập Gmail nhưng chưa được cấu hình. Mở file <code>index.html</code>, tìm biến <code>GOOGLE_CLIENT_ID</code> ở cuối trang và dán Client ID vào đó (xem hướng dẫn trong <code>Code.gs</code>).
   </div>
+
+  <div class="card login-card" id="loginCard" style="display:none">
+    <h2>Đăng nhập</h2>
+    <p class="login-desc">Vui lòng đăng nhập bằng Gmail của anh/chị để tiếp tục đăng ký mua hiện vật bồi dưỡng.</p>
+    <div id="googleSignInBtn"></div>
+    <div class="login-status" id="loginStatus"></div>
+  </div>
+
+  <div id="appMain" style="display:none">
+    <div class="card welcome-card">
+      <div class="welcome-label">Xin chào</div>
+      <div class="welcome-name" id="welcomeName">—</div>
+    </div>
 
   <div class="card highlight" id="gaugeCard" style="display:none">
     <div class="gauge-readout">
@@ -351,9 +384,10 @@
     <div id="itemList"></div>
     <div class="empty-note" id="emptyNote" style="display:none">Không tìm thấy mặt hàng phù hợp.</div>
   </div>
+  </div>
 </main>
 
-<div class="action-bar">
+<div class="action-bar" id="actionBar" style="display:none">
   <div class="save-total">Đã chọn <b class="mono" id="footTotal">0 ₫</b><span id="saveMsg"></span></div>
   <button id="saveBtn" disabled>Lưu lựa chọn</button>
 </div>
@@ -365,6 +399,9 @@
 <script>
 /* ====================== CẤU HÌNH ====================== */
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxYrHkBjCM_XURCczZ7HJLsbL9qD6VUQ2DqTL3Xkpzc6iUdzISQ0zikj29RrlsRWkrD4w/exec";
+// Để trống hoặc giữ nguyên chữ "DÁN_CLIENT_ID" phía trước = TẮT đăng nhập Gmail (vào thẳng trang như trước).
+// Dán Client ID thật vào đây để BẬT yêu cầu đăng nhập Gmail (nhớ dán TRÙNG với GOOGLE_CLIENT_ID trong Code.gs).
+const GOOGLE_CLIENT_ID = "528511663233-7bl2346uoama1feoes82ik2nu608cb3a.apps.googleusercontent.com";
 /* ======================================================= */
 
 const state = {
@@ -374,12 +411,13 @@ const state = {
   activeCategory: 'Tất cả',
   selections: {},      // { "Tên hàng hoá": soLuong }
   currentMember: null, // { name, budget }
-  search: ''
+  search: '',
+  idToken: null,        // JWT từ Google Sign-In (nếu có đăng nhập)
+  authMember: null       // Tên thành viên khớp với Gmail đã đăng nhập (nếu có)
 };
 
 const els = {
   setupBanner: document.getElementById('setupBanner'),
-  memberSelect: document.getElementById('memberSelect'),
   gaugeCard: document.getElementById('gaugeCard'),
   totalValue: document.getElementById('totalValue'),
   budgetValue: document.getElementById('budgetValue'),
@@ -398,6 +436,14 @@ const els = {
   footTotal: document.getElementById('footTotal'),
   saveBtn: document.getElementById('saveBtn'),
   saveMsg: document.getElementById('saveMsg'),
+  loginCard: document.getElementById('loginCard'),
+  loginConfigBanner: document.getElementById('loginConfigBanner'),
+  loginStatus: document.getElementById('loginStatus'),
+  googleSignInBtn: document.getElementById('googleSignInBtn'),
+  welcomeName: document.getElementById('welcomeName'),
+  appMain: document.getElementById('appMain'),
+  actionBar: document.getElementById('actionBar'),
+  signOutBtn: document.getElementById('signOutBtn'),
 };
 
 function vnd(n){ return Math.round(n).toLocaleString('vi-VN') + ' ₫'; }
@@ -406,11 +452,13 @@ function vnd(n){ return Math.round(n).toLocaleString('vi-VN') + ' ₫'; }
 const THUMB_PLACEHOLDER = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
 
 async function apiGet(params){
+  if (state.idToken) params = Object.assign({}, params, { idToken: state.idToken });
   const url = APPS_SCRIPT_URL + '?' + new URLSearchParams(params).toString();
   const res = await fetch(url);
   return res.json();
 }
 async function apiPost(body){
+  if (state.idToken) body = Object.assign({}, body, { idToken: state.idToken });
   // Không set Content-Type thủ công để tránh preflight CORS bị Apps Script chặn
   const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify(body) });
   return res.json();
@@ -574,37 +622,36 @@ function escapeHtml(s){
 }
 function cssSafe(s){ return String(s).replace(/[^a-zA-Z0-9]/g,'_'); }
 
-// Chia nhân viên thành nhóm theo số thứ tự (đúng thứ tự cột trong sheet "Tổng hợp").
-// Đổi các mốc "from/to" bên dưới nếu danh sách nhân viên trong sheet thay đổi sau này.
-const MEMBER_GROUPS = [
-  { label: 'ATCO',  from: 1,  to: 15 },
-  { label: 'ATSEP', from: 16, to: 40 },
-  { label: 'SIG',   from: 41, to: 42 },
-];
+async function attemptLogin(){
+  els.loginStatus.textContent = 'Đang kiểm tra tài khoản…';
+  els.loginStatus.className = 'login-status';
 
-function renderMemberOptions(){
-  return MEMBER_GROUPS.map(g=>{
-    const opts = state.members
-      .map((m, i)=>({ m: m, num: i+1 }))
-      .filter(({num})=> num >= g.from && num <= g.to)
-      .map(({m, num})=>`<option value="${escapeHtml(m.name)}">${num}. ${escapeHtml(m.name)}</option>`)
-      .join('');
-    return opts ? `<optgroup label="${escapeHtml(g.label)}">${opts}</optgroup>` : '';
-  }).join('');
-}
-
-async function loadCatalog(){
   const res = await apiGet({ action:'catalog' });
-  if (!res.ok){ alert('Lỗi tải danh mục: ' + res.error); return; }
+  if (!res.ok){
+    els.loginStatus.textContent = 'Lỗi: ' + res.error;
+    els.loginStatus.className = 'login-status err';
+    return;
+  }
+
+  if (!res.authMember){
+    state.idToken = null; // Gmail chưa được khai báo cho ai -> không cho vào
+    els.loginStatus.textContent = 'Gmail này chưa được đăng ký trong hệ thống. Vui lòng liên hệ quản trị viên để được thêm vào danh sách.';
+    els.loginStatus.className = 'login-status err';
+    if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
+    return;
+  }
+
   state.members = res.members;
   state.items = res.items;
   state.categories = [...new Set(res.items.map(i=>i.category).filter(Boolean))];
+  state.authMember = res.authMember;
 
-  els.memberSelect.innerHTML = '<option value="">— Chọn tên của anh/chị —</option>' + renderMemberOptions();
-
+  els.welcomeName.textContent = state.authMember;
   renderTabs();
   els.catalogCard.style.display = 'block';
   renderList();
+  showApp();
+  loadMember(state.authMember);
 }
 
 async function loadMember(name){
@@ -618,7 +665,6 @@ async function loadMember(name){
   renderList();
 }
 
-els.memberSelect.onchange = ()=> loadMember(els.memberSelect.value);
 
 els.scrollTopBtn.onclick = ()=>{
   els.summaryCard.scrollIntoView({ behavior:'smooth', block:'start' });
@@ -645,12 +691,59 @@ els.saveBtn.onclick = async ()=>{
   }
 };
 
+function isGoogleLoginConfigured(){
+  return !!GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID.indexOf('DÁN_CLIENT_ID') !== 0;
+}
+
+function showApp(){
+  els.loginCard.style.display = 'none';
+  els.appMain.style.display = 'block';
+  els.actionBar.style.display = 'flex';
+  els.signOutBtn.style.display = 'inline-block';
+}
+
+function handleCredentialResponse(response){
+  state.idToken = response.credential;
+  attemptLogin();
+}
+
+els.signOutBtn.onclick = ()=>{
+  state.idToken = null;
+  state.authMember = null;
+  state.currentMember = null;
+  state.selections = {};
+  els.appMain.style.display = 'none';
+  els.actionBar.style.display = 'none';
+  els.scrollTopBtn.style.display = 'none';
+  els.signOutBtn.style.display = 'none';
+  els.loginStatus.textContent = '';
+  els.loginCard.style.display = 'block';
+  if (window.google && google.accounts && google.accounts.id){
+    google.accounts.id.disableAutoSelect();
+  }
+};
+
 (function init(){
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('PASTE_') === 0){
     els.setupBanner.style.display = 'block';
     return;
   }
-  loadCatalog();
+
+  if (!isGoogleLoginConfigured()){
+    // Trang bắt buộc đăng nhập Gmail nhưng GOOGLE_CLIENT_ID chưa được cấu hình -> chặn hẳn, không vào được
+    els.loginConfigBanner.style.display = 'block';
+    return;
+  }
+
+  els.loginCard.style.display = 'block';
+  (function initGoogleButton(){
+    if (!window.google || !google.accounts || !google.accounts.id){
+      setTimeout(initGoogleButton, 300); // script Google Identity Services chưa tải xong, thử lại
+      return;
+    }
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
+    google.accounts.id.renderButton(els.googleSignInBtn, { theme:'outline', size:'large', text:'signin_with', locale:'vi' });
+  })();
 })();
 </script>
 </body>
