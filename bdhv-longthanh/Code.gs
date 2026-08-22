@@ -30,19 +30,6 @@
  * ADMIN_KEY bên dưới mới ghi được. Đây là cách Claude có thể tự cập nhật giá vào sheet
  * "Tổng hợp" giúp anh mà không cần anh copy/paste tay — chỉ cần triển khai lại (New
  * version) sau khi dán code này.
- * ĐĂNG NHẬP GMAIL (BẮT BUỘC):
- * 1. Thêm 1 hàng "Gmail" vào sheet "Tổng hợp", ngay cạnh hàng "Họ và tên" — mỗi cột
- *    dán đúng địa chỉ Gmail của người tương ứng ở cột đó.
- * 2. Tạo OAuth Client ID tại https://console.cloud.google.com (APIs & Services >
- *    Credentials > Create Credentials > OAuth client ID > Web application), thêm domain
- *    Netlify của trang web vào "Authorized JavaScript origins".
- * 3. Dán Client ID vào GOOGLE_CLIENT_ID bên dưới, VÀ vào biến cùng tên trong site/index.html
- *    (phải giống hệt nhau).
- * 4. Chỉ những Gmail ĐÃ khai báo trong sheet mới đăng nhập được — Gmail chưa khai báo sẽ
- *    bị từ chối (không có chế độ vào tự do). Nếu chưa dán GOOGLE_CLIENT_ID, trang web sẽ
- *    hiện banner báo chưa cấu hình và không cho vào, thay vì mở tự do như trước.
- * 5. Web không còn ô chọn tên thủ công — sau khi đăng nhập, hệ thống tự nhận đúng người
- *    dựa vào Gmail và hiển thị tên ngay trên trang.
  */
 
 const SHEET_NAME = 'Tổng hợp'; // đổi nếu tên tab khác
@@ -51,11 +38,6 @@ const SHEET_NAME = 'Tổng hợp'; // đổi nếu tên tab khác
 // một chuỗi riêng của anh, không chia sẻ công khai (khác với việc URL Web App vẫn "Anyone"
 // truy cập được, nhưng phải biết đúng mã này thì mới ghi/sửa được giá).
 const ADMIN_KEY = 'longthanh-bdhv-2026-doimatkhau';
-
-// OAuth Client ID tạo trong Google Cloud Console (Sign in with Google) — dán vào đây.
-// Dùng để xác thực idToken gửi lên từ trang web (site/index.html cũng cần đúng CLIENT_ID này).
-const GOOGLE_CLIENT_ID = "528511663233-7bl2346uoama1feoes82ik2nu608cb3a.apps.googleusercontent.com";
-'DÁN_CLIENT_ID_CỦA_ANH_VÀO_ĐÂY.apps.googleusercontent.com';
 
 // ───────────────────────── Đọc cấu trúc bảng tính (tự động, không hard-code ô) ─────────────────────────
 
@@ -71,16 +53,15 @@ function readStructure_(sheet) {
   const numRows = data.length;
   const numCols = data[0].length;
 
-  // 1) Tìm hàng "Họ và tên", "Mức chi bồi dưỡng..." và "Gmail" (tuỳ chọn, để đăng nhập)
-  let nameRow = -1, budgetRow = -1, gmailRow = -1;
+  // 1) Tìm hàng "Họ và tên" và hàng "Mức chi bồi dưỡng..."
+  let nameRow = -1, budgetRow = -1;
   for (let r = 0; r < numRows; r++) {
     for (let c = 0; c < numCols; c++) {
       const val = String(data[r][c]).trim();
       if (val === 'Họ và tên') nameRow = r;
       if (val.indexOf('Mức chi bồi dưỡng') === 0) budgetRow = r;
-      if (val === 'Gmail' || val === 'Email' || val === 'Địa chỉ Gmail') gmailRow = r;
     }
-    if (nameRow >= 0 && budgetRow >= 0 && gmailRow >= 0) break;
+    if (nameRow >= 0 && budgetRow >= 0) break;
   }
   if (nameRow < 0) throw new Error('Không tìm thấy hàng "Họ và tên" trong sheet "' + SHEET_NAME + '".');
   if (budgetRow < 0) budgetRow = nameRow + 1;
@@ -101,8 +82,7 @@ function readStructure_(sheet) {
     const name = String(data[nameRow][c]).trim();
     if (!name) continue;
     const budget = Number(data[budgetRow][c]) || 0;
-    const gmail = gmailRow >= 0 ? String(data[gmailRow][c]).trim().toLowerCase() : '';
-    members.push({ name: name, col: c, budget: budget, gmail: gmail });
+    members.push({ name: name, col: c, budget: budget });
   }
 
   // 3) Tìm hàng tiêu đề bảng hàng hoá: có cả "STT", "Tên hàng hoá", "Đơn giá"
@@ -149,37 +129,6 @@ function readStructure_(sheet) {
   return { data: data, nameRow: nameRow, budgetRow: budgetRow, members: members, items: items, colPrice: colPrice };
 }
 
-// ───────────────────────── Xác thực đăng nhập Google (tuỳ chọn) ─────────────────────────
-
-// Gọi endpoint xác thực của Google để kiểm tra idToken có hợp lệ không (không tự giải mã JWT).
-// Trả về email đã xác thực, hoặc null nếu token không hợp lệ/hết hạn/sai audience.
-function verifyGoogleIdToken_(idToken) {
-  if (!idToken) return null;
-  try {
-    const res = UrlFetchApp.fetch(
-      'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken),
-      { muteHttpExceptions: true }
-    );
-    if (res.getResponseCode() !== 200) return null;
-    const info = JSON.parse(res.getContentText());
-    if (info.email_verified !== 'true' && info.email_verified !== true) return null;
-    if (GOOGLE_CLIENT_ID.indexOf('DÁN_CLIENT_ID') !== 0 && info.aud !== GOOGLE_CLIENT_ID) return null;
-    return String(info.email || '').trim().toLowerCase();
-  } catch (err) {
-    return null;
-  }
-}
-
-// Tìm thành viên khớp với idToken (theo Gmail đã khai báo trong sheet).
-// Trả về null nếu: không có token, token không hợp lệ, hoặc email chưa được khai báo cho ai —
-// những trường hợp này KHÔNG chặn truy cập, mà để doGet/doPost xử lý tiếp theo kiểu cũ (dự phòng
-// lúc chưa khai báo đủ Gmail cho toàn bộ 42 người).
-function resolveAuthMember_(struct, idToken) {
-  const email = verifyGoogleIdToken_(idToken);
-  if (!email) return null;
-  return struct.members.filter(function (m) { return m.gmail && m.gmail === email; })[0] || null;
-}
-
 // ───────────────────────── API ─────────────────────────
 
 function doGet(e) {
@@ -189,12 +138,11 @@ function doGet(e) {
     const struct = readStructure_(sheet);
 
     if (action === 'catalog') {
-      const authMember = resolveAuthMember_(struct, e.parameter.idToken);
       const members = struct.members.map(function (m) { return { name: m.name, budget: m.budget }; });
       const items = struct.items.map(function (it) {
         return { stt: it.stt, name: it.name, unit: it.unit, price: it.price, image: it.image, category: it.category };
       });
-      return jsonOut_({ ok: true, members: members, items: items, authMember: authMember ? authMember.name : null });
+      return jsonOut_({ ok: true, members: members, items: items });
     }
 
     if (action === 'updatePrices') {
@@ -222,17 +170,9 @@ function doGet(e) {
     }
 
     if (action === 'member') {
-      // Bắt buộc đăng nhập Gmail hợp lệ và đã được đăng ký trong sheet — không còn cho phép
-      // truyền thẳng ?name=... mà không đăng nhập (chỉ chấp nhận nếu trùng đúng người đã đăng nhập).
-      const authMember = resolveAuthMember_(struct, e.parameter.idToken);
-      if (!authMember) {
-        return jsonOut_({ ok: false, error: 'Cần đăng nhập bằng Gmail đã được đăng ký để xem dữ liệu.' });
-      }
-      const requestedName = (e.parameter.name || '').trim();
-      if (requestedName && requestedName !== authMember.name) {
-        return jsonOut_({ ok: false, error: 'Tên yêu cầu không khớp với tài khoản Gmail đã đăng nhập.' });
-      }
-      const member = authMember;
+      const name = (e.parameter.name || '').trim();
+      const member = struct.members.filter(function (m) { return m.name === name; })[0];
+      if (!member) return jsonOut_({ ok: false, error: 'Không tìm thấy thành viên: ' + name });
 
       const selections = {};
       let tongTien = 0;
@@ -255,22 +195,14 @@ function doGet(e) {
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
+    const name = String(body.name || '').trim();
     const selections = body.selections || {}; // { "Tên hàng hoá đúng như trong sheet": soLuong }
 
     const sheet = getSheet_();
     const struct = readStructure_(sheet);
 
-    // Bắt buộc đăng nhập Gmail hợp lệ và đã được đăng ký — không còn cho phép ghi hộ người khác
-    // chỉ bằng cách truyền "name" tuỳ ý trong body.
-    const authMember = resolveAuthMember_(struct, body.idToken);
-    if (!authMember) {
-      return jsonOut_({ ok: false, error: 'Cần đăng nhập bằng Gmail đã được đăng ký để lưu lựa chọn.' });
-    }
-    const requestedName = String(body.name || '').trim();
-    if (requestedName && requestedName !== authMember.name) {
-      return jsonOut_({ ok: false, error: 'Tên yêu cầu không khớp với tài khoản Gmail đã đăng nhập.' });
-    }
-    const member = authMember;
+    const member = struct.members.filter(function (m) { return m.name === name; })[0];
+    if (!member) return jsonOut_({ ok: false, error: 'Không tìm thấy thành viên: ' + name });
 
     // Ghi đè toàn bộ lựa chọn của thành viên này (mặt hàng không có trong selections -> để trống)
     let tongTien = 0;
