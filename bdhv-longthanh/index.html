@@ -75,6 +75,16 @@
     margin-bottom:16px;
   }
   .card h2{font-size:14px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:12px;}
+
+  .summary-heading-row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px;}
+  .summary-heading-row h2{margin-bottom:0;}
+  .clear-cart-btn{
+    font-size:12.5px; font-weight:600; color:#B3432B; background:#FBEAE6;
+    border:1px solid #EFC2B4; border-radius:999px; padding:7px 14px; cursor:pointer;
+    white-space:nowrap; font-family:'Inter',sans-serif;
+  }
+  .clear-cart-btn:hover{background:#F5CFC2;}
+  .clear-cart-btn:disabled{opacity:.5; cursor:not-allowed;}
   .card.highlight{
     background:linear-gradient(180deg, #FFF6E6, #FFECC7);
     border-color:#E8B95C;
@@ -413,7 +423,10 @@
   </div>
 
   <div class="card highlight" id="summaryCard" style="display:none">
-    <h2>Mặt hàng đã chọn</h2>
+    <div class="summary-heading-row">
+      <h2>Mặt hàng đã chọn</h2>
+      <button type="button" id="clearCartBtn" class="clear-cart-btn" style="display:none">Xoá hết giỏ hàng</button>
+    </div>
     <div class="summary-table" id="summaryTable">
       <div class="summary-row summary-head">
         <div>Tên hàng hoá</div>
@@ -501,6 +514,7 @@ const els = {
   summaryCard: document.getElementById('summaryCard'),
   summaryList: document.getElementById('summaryList'),
   summaryEmpty: document.getElementById('summaryEmpty'),
+  clearCartBtn: document.getElementById('clearCartBtn'),
   scrollTopBtn: document.getElementById('scrollTopBtn'),
   catalogCard: document.getElementById('catalogCard'),
   tabBar: document.getElementById('tabBar'),
@@ -576,6 +590,7 @@ function renderSummary(){
     })
     .filter(Boolean);
   els.summaryEmpty.style.display = entries.length ? 'none' : 'block';
+  els.clearCartBtn.style.display = entries.length ? 'inline-block' : 'none';
   els.summaryList.innerHTML = entries.map(({item, qty})=>`
     <div class="summary-row">
       <div>
@@ -913,8 +928,8 @@ els.scrollTopBtn.onclick = ()=>{
 };
 els.searchBox.oninput = ()=>{ state.search = els.searchBox.value; renderList(); };
 
-els.saveBtn.onclick = async ()=>{
-  if (!state.currentMember || !state.password) return;
+async function saveSelections(){
+  if (!state.currentMember || !state.password) return false;
   els.saveBtn.disabled = true;
   els.saveMsg.textContent = 'Đang lưu…';
   els.saveMsg.className = '';
@@ -930,11 +945,35 @@ els.saveBtn.onclick = async ()=>{
     els.saveMsg.textContent = '✓ Đã lưu lúc ' + new Date().toLocaleTimeString('vi-VN');
     els.saveMsg.className = 'ok';
     renderGauge();
+    return true;
   }catch(err){
     els.saveMsg.textContent = '✗ ' + err.message;
     els.saveMsg.className = 'err';
+    return false;
   }finally{
     els.saveBtn.disabled = false;
+  }
+}
+els.saveBtn.onclick = saveSelections;
+
+// Xoá toàn bộ giỏ hàng: xoá trên màn hình rồi LƯU NGAY lên sheet (không cần bấm "Lưu lựa chọn").
+els.clearCartBtn.onclick = async ()=>{
+  if (!state.currentMember || !state.password) return;
+  if (!Object.keys(state.selections).length) return;
+  if (!confirm('Xoá toàn bộ mặt hàng đã chọn và lưu giỏ hàng trống lên hệ thống?\nThao tác này không hoàn tác được.')) return;
+
+  const backup = state.selections;
+  state.selections = {};
+  renderGauge(); renderSummary(); renderList();
+
+  els.clearCartBtn.disabled = true;
+  const ok = await saveSelections();
+  els.clearCartBtn.disabled = false;
+
+  if (!ok){
+    // Lưu thất bại -> khôi phục lại giỏ hàng cũ để không bị lệch với dữ liệu trên sheet
+    state.selections = backup;
+    renderGauge(); renderSummary(); renderList();
   }
 };
 
