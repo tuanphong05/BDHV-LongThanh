@@ -678,22 +678,55 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
 
+// Mỗi nhóm có thể xác định thành viên theo 2 cách:
+//  - from/to : theo số thứ tự cột trong sheet "Tổng hợp" (1 = người đầu tiên)
+//  - names   : theo TÊN (ưu tiên hơn from/to; không phụ thuộc người đó nằm ở cột nào)
+// Ai không thuộc nhóm nào sẽ tự động vào nhóm "KHÁC" (không bị ẩn khỏi danh sách).
+// (Người xếp theo "names" luôn được ưu tiên hơn theo "from/to", nên dù SIG/An ninh nằm ở
+//  cột nào thì vẫn vào đúng nhóm, không bị lẫn vào khoảng số thứ tự của ATSEP.)
 const MEMBER_GROUPS = [
-  { label: 'ATCO',  from: 1,  to: 15 },
-  { label: 'ATSEP', from: 16, to: 40 },
-  { label: 'SIG',   from: 41, to: 42 },
-  { label: 'AN NINH', from: 43, to: 43 },
+  { label: 'ATCO',    from: 1,  to: 15 },
+  { label: 'ATSEP',   from: 16, to: 42, names: ['Đào Duy Nam', 'Trần Thảo Vân'] },
+  { label: 'SIG',     names: ['Nguyễn Quang Dũng', 'Lương Tấn Việt'] },
+  { label: 'AN NINH', names: ['Nguyễn Văn Đức'] },
 ];
 
+// Chuẩn hoá tên để so khớp: bỏ xuống dòng/khoảng trắng thừa, không phân biệt hoa thường
+function normName(s){
+  return String(s).replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 function renderMemberOptions(){
-  return MEMBER_GROUPS.map(g=>{
-    const opts = state.members
-      .map((m, i)=>({ m, num: i+1 }))
-      .filter(({num})=> num >= g.from && num <= g.to)
-      .map(({m, num})=>`<option value="${escapeHtml(m.name)}">${num}. ${escapeHtml(m.name)}</option>`)
-      .join('');
-    return opts ? `<optgroup label="${escapeHtml(g.label)}">${opts}</optgroup>` : '';
-  }).join('');
+  const numbered = state.members.map((m, i)=>({ m, num: i+1 }));
+  const used = new Set();
+  const optHtml = ({m, num})=>`<option value="${escapeHtml(m.name)}">${num}. ${escapeHtml(String(m.name).replace(/\s+/g, ' ').trim())}</option>`;
+
+  // Bước 1: những người được chỉ định theo tên
+  const byName = MEMBER_GROUPS.map(g=>{
+    const set = new Set((g.names || []).map(normName));
+    const list = numbered.filter(x=> set.has(normName(x.m.name)));
+    list.forEach(x=> used.add(x.num));
+    return list;
+  });
+
+  // Bước 2: ghép thêm theo khoảng số thứ tự (bỏ qua người đã được xếp theo tên)
+  const groups = MEMBER_GROUPS.map((g, gi)=>{
+    const byRange = (g.from && g.to)
+      ? numbered.filter(x=> x.num >= g.from && x.num <= g.to && !used.has(x.num))
+      : [];
+    const all = byName[gi].concat(byRange).sort((a,b)=> a.num - b.num);
+    all.forEach(x=> used.add(x.num));
+    return { label: g.label, list: all };
+  });
+
+  // Bước 3: ai chưa thuộc nhóm nào -> nhóm "KHÁC"
+  const rest = numbered.filter(x=> !used.has(x.num));
+  if (rest.length) groups.push({ label: 'KHÁC', list: rest });
+
+  return groups
+    .filter(g=> g.list.length)
+    .map(g=> `<optgroup label="${escapeHtml(g.label)}">${g.list.map(optHtml).join('')}</optgroup>`)
+    .join('');
 }
 
 async function loadCatalog(){
